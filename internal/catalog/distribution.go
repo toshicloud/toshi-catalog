@@ -3,7 +3,7 @@ package catalog
 
 import "fmt"
 
-func validateDistribution(d Distribution, builtins, files map[string]bool, products map[string]*Product, report reporter) {
+func validateDistribution(d Distribution, builtins, keyProviders, files map[string]bool, products map[string]*Product, report reporter) {
 	if !idPattern.MatchString(d.Name) {
 		report("distribution.name", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
 	}
@@ -63,6 +63,25 @@ func validateDistribution(d Distribution, builtins, files map[string]bool, produ
 			} else if withdrawn {
 				report(field, "module version %q is withdrawn", m.Version)
 			}
+		}
+	}
+	kinds := make(map[string]bool)
+	for _, listed := range d.KeyProviders {
+		field := "key provider " + listed.Kind
+		if listed.Kind == "" {
+			field = "key provider <empty>"
+		}
+		if !idPattern.MatchString(listed.Kind) {
+			report(field, "kind must start with a lowercase letter and contain only lowercase letters, digits and underscores")
+		}
+		if kinds[listed.Kind] {
+			report(field, "is listed more than once")
+		}
+		kinds[listed.Kind] = true
+		if listed.Builtin == nil || !*listed.Builtin {
+			report(field, "must be builtin = true: every key provider is part of Toshi itself")
+		} else if !keyProviders[listed.Kind] {
+			report(field, "builtin requires a matching builtins.toml key_providers entry")
 		}
 	}
 	for i, m := range d.Modules {
