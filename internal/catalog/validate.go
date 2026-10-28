@@ -42,6 +42,31 @@ func validatePublishers(publishers []Publisher, report reporter) {
 	}
 }
 
+// validateBuiltins checks builtins.toml; a builtin's ID may not also name a
+// product entry.
+func validateBuiltins(builtins []Builtin, productFiles map[string]bool, report reporter) {
+	seen := make(map[string]bool)
+	for i, b := range builtins {
+		field := fmt.Sprintf("builtins[%d]", i)
+		if !idPattern.MatchString(b.ID) {
+			report(field+".id", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
+		}
+		if b.ID != "" && seen[b.ID] {
+			report(field+".id", "duplicate builtin %q", b.ID)
+		}
+		seen[b.ID] = true
+		if productFiles[b.ID] {
+			report(field+".id", "%q is also a products/%s.toml entry", b.ID, b.ID)
+		}
+		if !nonempty(b.Name) || len(b.Name) > 64 {
+			report(field+".name", "must contain 1 to 64 bytes")
+		}
+		if !nonempty(b.Description) || len(b.Description) > 280 {
+			report(field+".description", "must contain 1 to 280 bytes")
+		}
+	}
+}
+
 func validateProducts(products []Product, publishers []Publisher, reporterFor func(string) reporter) {
 	publisherIDs := make(map[string]bool)
 	for _, p := range publishers {

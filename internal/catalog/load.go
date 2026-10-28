@@ -13,6 +13,10 @@ type publishersFile struct {
 	Publishers []Publisher `toml:"publishers"`
 }
 
+type builtinsFile struct {
+	Builtins []Builtin `toml:"builtins"`
+}
+
 type distributionFile struct {
 	Distribution struct {
 		Name string `toml:"name"`
@@ -81,6 +85,17 @@ func Load(dir string) (*Catalog, []Problem, error) {
 	}
 	validateProducts(c.Products, c.Publishers, report)
 
+	var bf builtinsFile
+	if _, err := read("builtins.toml", &bf); err != nil {
+		return nil, problems, err
+	}
+	c.Builtins = bf.Builtins
+	validateBuiltins(c.Builtins, productFiles, report("builtins.toml"))
+	builtinIDs := make(map[string]bool)
+	for _, b := range c.Builtins {
+		builtinIDs[b.ID] = true
+	}
+
 	entries, err = os.ReadDir(filepath.Join(dir, "distributions"))
 	if err != nil {
 		return nil, problems, fmt.Errorf("distributions: %w", err)
@@ -103,7 +118,7 @@ func Load(dir string) (*Catalog, []Problem, error) {
 			continue
 		}
 		d := Distribution{Name: df.Distribution.Name, Products: df.Products, Modules: df.Modules, File: file}
-		validateDistribution(d, productFiles, productByFile, report(file))
+		validateDistribution(d, builtinIDs, productFiles, productByFile, report(file))
 		sort.SliceStable(d.Products, func(i, j int) bool { return d.Products[i].ID < d.Products[j].ID })
 		sort.SliceStable(d.Modules, func(i, j int) bool {
 			if d.Modules[i].Path != d.Modules[j].Path {
@@ -114,6 +129,7 @@ func Load(dir string) (*Catalog, []Problem, error) {
 		c.Distributions = append(c.Distributions, d)
 	}
 	sort.SliceStable(c.Publishers, func(i, j int) bool { return c.Publishers[i].ID < c.Publishers[j].ID })
+	sort.SliceStable(c.Builtins, func(i, j int) bool { return c.Builtins[i].ID < c.Builtins[j].ID })
 	sort.SliceStable(c.Products, func(i, j int) bool { return c.Products[i].ID < c.Products[j].ID })
 	sort.SliceStable(c.Distributions, func(i, j int) bool {
 		if c.Distributions[i].Name != c.Distributions[j].Name {

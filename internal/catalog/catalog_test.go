@@ -45,11 +45,18 @@ path = "github.com/acme/deploys"
 version = "v1.4.0"
 `
 
+const builtinsFixture = `[[builtins]]
+id = "runners"
+name = "Runners"
+description = "Runs jobs."
+`
+
 func fixtures(t *testing.T) (string, map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
 	files := map[string]string{
 		"publishers.toml":           publishersFixture,
+		"builtins.toml":             builtinsFixture,
 		"products/deploys.toml":     productFixture,
 		"distributions/hosted.toml": distributionFixture,
 	}
@@ -90,6 +97,7 @@ func TestSchemaRules(t *testing.T) {
 	const pub = "publishers.toml"
 	const product = "products/deploys.toml"
 	const dist = "distributions/hosted.toml"
+	const builtins = "builtins.toml"
 	const version = "version = \"v1.4.0\""
 	const compatibility = "toshi = { min = \"v0.6.0\", max = \"v0.7.0\" }"
 	cases := []struct {
@@ -152,6 +160,13 @@ func TestSchemaRules(t *testing.T) {
 		{"builtin has entry", dist, `id = "deploys"`, "id = \"deploys\"\nbuiltin = true", "builtin must not have a product entry"},
 		{"builtin false", dist, `id = "deploys"`, "id = \"deploys\"\nbuiltin = false", "must omit builtin"},
 		{"missing product", dist, `id = "deploys"`, `id = "unknown"`, "requires a matching products/unknown.toml entry"},
+		{"unknown builtin", dist, `id = "runners"`, `id = "unknown"`, "builtin requires a matching builtins.toml entry"},
+		{"builtin id", builtins, `id = "runners"`, `id = "Runners"`, ": builtins[0].id:"},
+		{"builtin name", builtins, `name = "Runners"`, `name = ""`, ": builtins[0].name:"},
+		{"builtin description", builtins, `description = "Runs jobs."`, `description = ""`, ": builtins[0].description:"},
+		{"builtin unknown key", builtins, `name = "Runners"`, "name = \"Runners\"\nextra = true", ": builtins[0].extra:"},
+		{"duplicate builtin", builtins, builtinsFixture, builtinsFixture + builtinsFixture, "duplicate builtin"},
+		{"builtin is a product", builtins, `id = "runners"`, `id = "deploys"`, "is also a products/deploys.toml entry"},
 		{"missing module", dist, "[[modules]]\npath = \"github.com/acme/deploys\"\nversion = \"v1.4.0\"\n", "", "requires exactly one module"},
 		{"wrong version", dist, version, `version = "v1.5.0"`, "is not listed in the product"},
 		{"orphan module", dist, `path = "github.com/acme/deploys"`, `path = "github.com/acme/other"`, "does not belong to a listed catalog product"},

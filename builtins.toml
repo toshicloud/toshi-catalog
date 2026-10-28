@@ -1,0 +1,11 @@
+# The products that are part of Toshi itself. A distribution lists one with
+# `builtin = true`; it has no products/<id>.toml entry and no module.
+[[builtins]]
+id = "runners"
+name = "Runners"
+description = "Runs GitHub Actions jobs on the deployment's hosts."
+
+[[builtins]]
+id = "previews"
+name = "Previews"
+description = "Serves a sandbox's http channels at preview hostnames and shares them through share links."

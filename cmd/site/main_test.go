@@ -105,6 +105,20 @@ path = "github.com/acme/deploys"
 version = "v1.4.0"
 `
 
+const testBuiltins = `[[builtins]]
+id = "runners"
+name = "Runners"
+description = "Runs jobs."
+[[builtins]]
+id = "previews"
+name = "Previews"
+description = "Serves previews."
+[[builtins]]
+id = "other_builtin"
+name = "Other"
+description = "Built into another distribution."
+`
+
 func writeFixture(t *testing.T, dir, name, content string) {
 	t.Helper()
 	path := filepath.Join(dir, filepath.FromSlash(name))
@@ -120,6 +134,7 @@ func fixture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	writeFixture(t, dir, "publishers.toml", testPublishers)
+	writeFixture(t, dir, "builtins.toml", testBuiltins)
 	writeFixture(t, dir, "products/deploys.toml", testProduct)
 	writeFixture(t, dir, "products/archive.toml", testArchive)
 	writeFixture(t, dir, "products/retired.toml", testRetired)
@@ -185,8 +200,8 @@ func TestRunBuildsSite(t *testing.T) {
 		t.Error("a product from another distribution is marked hosted")
 	}
 	requireContains(t, product, "github.com/acme/deploys", "go get github.com/acme/deploys@v1.8.0", "Copy module path", "Copy go get", "Copy URL", "v1.4.0", "v2.0.0", "v0.6.0 to v0.7.0", "Unsafe &lt;script&gt; release (2026-10-20)", "https://example.com/api", "https://example.com/dashboard", "toshi-deploys", "github.com/acme/deploys-go", "https://example.com/docs?a=1&amp;b=2", "Hosted: ships version v1.4.0")
-	requireContains(t, hosted, "Built into Toshi", "previews", "runners", "github.com/acme/deploys", "v1.4.0", "Copy module path", "Copy version", "data-copy-target=\"hosted-manifest\"")
-	if strings.Index(hosted, "<li>previews</li>") >= strings.Index(hosted, "<li>runners</li>") || strings.Contains(hosted, "other_builtin") || strings.Contains(hosted, "github.com/acme/extras") {
+	requireContains(t, hosted, "Built into Toshi", "<strong>Previews</strong> (<code>previews</code>): Serves previews.", "<strong>Runners</strong> (<code>runners</code>): Runs jobs.", "github.com/acme/deploys", "v1.4.0", "Copy module path", "Copy version", "data-copy-target=\"hosted-manifest\"")
+	if strings.Index(hosted, "<code>previews</code>") >= strings.Index(hosted, "<code>runners</code>") || strings.Contains(hosted, "other_builtin") || strings.Contains(hosted, "github.com/acme/extras") {
 		t.Error("built-ins are not ordered or came from another distribution")
 	}
 	const manifestTag = "<pre><code id=\"hosted-manifest\">"

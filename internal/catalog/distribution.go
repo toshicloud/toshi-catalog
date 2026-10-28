@@ -3,7 +3,7 @@ package catalog
 
 import "fmt"
 
-func validateDistribution(d Distribution, files map[string]bool, products map[string]*Product, report reporter) {
+func validateDistribution(d Distribution, builtins, files map[string]bool, products map[string]*Product, report reporter) {
 	if !idPattern.MatchString(d.Name) {
 		report("distribution.name", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
 	}
@@ -32,6 +32,8 @@ func validateDistribution(d Distribution, files map[string]bool, products map[st
 			}
 			if files[listed.ID] {
 				report(field, "builtin must not have a product entry")
+			} else if !builtins[listed.ID] {
+				report(field, "builtin requires a matching builtins.toml entry")
 			}
 			continue
 		}

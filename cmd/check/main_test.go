@@ -19,11 +19,14 @@ func TestRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "publishers.toml"), []byte("[[publishers]]\nid = \"toshi\"\nname = \"Toshi\"\nurl = \"https://example.com\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "builtins.toml"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "distributions", "hosted.toml"), []byte("[distribution]\nname = \"hosted\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--dir", dir}, &stdout, &stderr); code != 0 || stdout.String() != "catalog: 1 publishers, 0 products, 1 distributions: ok\n" || stderr.Len() != 0 {
+	if code := run([]string{"--dir", dir}, &stdout, &stderr); code != 0 || stdout.String() != "catalog: 1 publishers, 0 builtins, 0 products, 1 distributions: ok\n" || stderr.Len() != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	stdout.Reset()

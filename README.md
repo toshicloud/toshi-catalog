@@ -14,6 +14,7 @@ The directory is published as a site at
 | Path | What it is |
 | --- | --- |
 | `publishers.toml` | One `[[publishers]]` table per publisher, with its name and URL. |
+| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, with its name and description. |
 | `products/` | One TOML file per product, `<id>.toml`, named by the product's `id`. |
 | `distributions/` | One TOML file per deployment manifest. `hosted.toml` is the hosted deployment's. |
 | `internal/catalog` | Loads and validates publishers, products and distributions. |
@@ -34,10 +35,11 @@ The directory is published as a site at
 Open a pull request that adds the product and its module to
 `distributions/hosted.toml`: a `[[products]]` table naming the product, and a
 `[[modules]]` table giving the product's module path and the version that ships
-it. The release that follows the pull request ships it.
+it. Each Toshi release builds from this file at a commit the release names, so
+the release that follows the pull request ships it.
 
-A `[[products]]` table with `builtin = true` names a part of Toshi itself and
-needs no product file.
+A `[[products]]` table with `builtin = true` names a part of Toshi itself: its
+`id` must be one `builtins.toml` lists, and it needs no product file.
 
 ## Withdrawing a product or a version
 
@@ -60,8 +62,11 @@ or write one: a `[distribution]` table, the `[[products]]` it ships, and a
   a description, a module path and at least one version; semantic versions and
   compatibility bounds; `removed_in` only on a deprecated version, and higher
   than it.
-- `distributions/`: every product and every module resolves to a product entry,
-  a module version is one the product lists, and nothing listed is withdrawn.
+- `builtins.toml`: a unique id in the same form as a product's, a name of 1–64
+  bytes, a description of 1–280 bytes, and no products/ entry with the same id.
+- `distributions/`: every builtin is one `builtins.toml` lists, every other
+  product and every module resolves to a product entry, a module version is one
+  the product lists, and nothing listed is withdrawn.
 - Withdrawal: a product or a version marked withdrawn carries a reason and a
   date, and no distribution lists it.
 
