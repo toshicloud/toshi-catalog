@@ -5,9 +5,11 @@ name = "hosted"
 [[products]]
 id = "runners"
 builtin = true
+stability = "stable"
 [[products]]
 id = "previews"
 builtin = true
+stability = "beta"
 [[key_providers]]
 kind = "aws_kms"
 builtin = true

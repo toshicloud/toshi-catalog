@@ -3,7 +3,7 @@
 <h1>The hosted deployment</h1>
 <p>What the hosted Toshi deployment ships. A self-hosted deployment builds from its own manifest: copy this one to start from it.</p>
 <h2>Built into Toshi</h2>
-{{if .Builtins}}<ul>{{range .Builtins}}<li><strong>{{.Name}}</strong> (<code>{{.ID}}</code>): {{.Description}}</li>{{end}}</ul>{{else}}<p>No built-in products are listed.</p>{{end}}
+{{if .Builtins}}<ul>{{range .Builtins}}<li><strong>{{.Name}}</strong> (<code>{{.ID}}</code>) <span class="badge">{{.Stability}}</span>: {{.Description}}</li>{{end}}</ul>{{else}}<p>No built-in products are listed.</p>{{end}}
 <h2>Products from this catalog</h2>
 {{if .Products}}<ul class="product-list">{{range .Products}}
   <li class="card">

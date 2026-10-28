@@ -17,6 +17,16 @@ var (
 
 func nonempty(s string) bool { return len(s) > 0 }
 
+const stabilityMessage = "must be alpha, beta, stable or deprecated"
+
+func validStability(s string) bool {
+	switch s {
+	case "alpha", "beta", "stable", "deprecated":
+		return true
+	}
+	return false
+}
+
 func httpsURL(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.Opaque == ""
@@ -63,6 +73,9 @@ func validateBuiltins(builtins []Builtin, productFiles map[string]bool, report r
 		}
 		if !nonempty(b.Description) || len(b.Description) > 280 {
 			report(field+".description", "must contain 1 to 280 bytes")
+		}
+		if !validStability(b.Stability) {
+			report(field+".stability", stabilityMessage)
 		}
 	}
 }
@@ -170,7 +183,7 @@ func validateProducts(products []Product, publishers []Publisher, reporterFor fu
 					report(field+".removed_in", "must be greater than the version")
 				}
 			default:
-				report(field+".stability", "must be alpha, beta, stable or deprecated")
+				report(field+".stability", stabilityMessage)
 				if v.RemovedIn != nil {
 					report(field+".removed_in", "is allowed only for a deprecated version")
 				}

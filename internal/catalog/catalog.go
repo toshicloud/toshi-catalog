@@ -22,11 +22,13 @@ type Publisher struct {
 }
 
 // Builtin is a product that is part of Toshi itself: a distribution lists it
-// with builtin = true, and it has no product entry or module.
+// with builtin = true, and it has no product entry or module. Stability is
+// the product's stability in the Toshi release a distribution builds.
 type Builtin struct {
 	ID          string `toml:"id"`
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
+	Stability   string `toml:"stability"`
 }
 
 // KeyProvider is a key provider engine that is part of Toshi itself: a
@@ -105,9 +107,12 @@ type Distribution struct {
 	File         string
 }
 
+// DistributionProduct is a product a distribution ships. Stability is the
+// builtin's, or that of the product version the distribution's module ships.
 type DistributionProduct struct {
-	ID      string `toml:"id"`
-	Builtin *bool  `toml:"builtin"`
+	ID        string `toml:"id"`
+	Builtin   *bool  `toml:"builtin"`
+	Stability string `toml:"stability"`
 }
 
 // DistributionKeyProvider is a key provider engine a distribution's

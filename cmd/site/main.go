@@ -27,7 +27,10 @@ type productView struct {
 	GoGet         string
 	HostedModule  string
 	HostedVersion string
-	Hosted        bool
+	// HostedStability is the stability of the version the hosted
+	// deployment ships.
+	HostedStability string
+	Hosted          bool
 }
 
 type pageHeader struct {
@@ -143,6 +146,11 @@ func build(c *catalog.Catalog, dir string) ([]outputFile, error) {
 		view := productView{
 			Product: *p, PublisherName: publishers[p.Publisher], LatestVersion: p.Latest(),
 			HostedModule: module, HostedVersion: version, Hosted: hosted,
+		}
+		for _, v := range p.Versions {
+			if hosted && v.Version == version {
+				view.HostedStability = v.Stability
+			}
 		}
 		if view.LatestVersion != nil && !p.IsWithdrawn() {
 			view.GoGet = "go get " + p.Module + "@" + view.LatestVersion.Version

@@ -3,7 +3,9 @@ package catalog
 
 import "fmt"
 
-func validateDistribution(d Distribution, builtins, keyProviders, files map[string]bool, products map[string]*Product, report reporter) {
+// validateDistribution checks d against the builtins (ID to stability), the
+// key provider kinds, the product files and the products by file name.
+func validateDistribution(d Distribution, builtins map[string]string, keyProviders, files map[string]bool, products map[string]*Product, report reporter) {
 	if !idPattern.MatchString(d.Name) {
 		report("distribution.name", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
 	}
@@ -25,15 +27,23 @@ func validateDistribution(d Distribution, builtins, keyProviders, files map[stri
 			report(field, "is listed more than once")
 		}
 		seen[listed.ID] = true
+		stabilityValid := validStability(listed.Stability)
+		if !stabilityValid {
+			report(field, "stability "+stabilityMessage)
+		}
 		if listed.Builtin != nil {
 			if !*listed.Builtin {
 				report(field, "a catalog product must omit builtin; a builtin must be true")
 				continue
 			}
-			if files[listed.ID] {
+			builtin, ok := builtins[listed.ID]
+			switch {
+			case files[listed.ID]:
 				report(field, "builtin must not have a product entry")
-			} else if !builtins[listed.ID] {
+			case !ok:
 				report(field, "builtin requires a matching builtins.toml entry")
+			case stabilityValid && listed.Stability != builtin:
+				report(field, "stability %q differs from builtins.toml's %q", listed.Stability, builtin)
 			}
 			continue
 		}
@@ -51,17 +61,21 @@ func validateDistribution(d Distribution, builtins, keyProviders, files map[stri
 			report(field, "requires exactly one module %q; found %d", p.Module, len(matches))
 		}
 		for _, m := range matches {
-			found, withdrawn := false, false
+			found, withdrawn, stability := false, false, ""
 			for _, v := range p.Versions {
 				if v.Version == m.Version {
 					found = true
 					withdrawn = withdrawn || v.IsWithdrawn()
+					stability = v.Stability
 				}
 			}
-			if !found {
+			switch {
+			case !found:
 				report(field, "module version %q is not listed in the product", m.Version)
-			} else if withdrawn {
+			case withdrawn:
 				report(field, "module version %q is withdrawn", m.Version)
+			case stabilityValid && listed.Stability != stability:
+				report(field, "stability %q differs from version %s's %q", listed.Stability, m.Version, stability)
 			}
 		}
 	}
