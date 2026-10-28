@@ -46,6 +46,37 @@ catalog_key_status() {
   fi
 }
 
+archive_generation() {
+  local sequence generation
+  sequence="$(sed -n 's/.*"sequence"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' index.json | head -n 1)"
+  case "$sequence" in
+    ''|*[!0-9]*)
+      printf 'index.json: invalid sequence\n' >&2
+      return 1
+      ;;
+  esac
+  if (( sequence < 1 )); then
+    printf 'index.json: invalid sequence\n' >&2
+    return 1
+  fi
+  generation="generations/$sequence"
+  mkdir -p generations || return 1
+  if [[ ! -e "$generation" ]]; then
+    # Copy into a staging folder and rename it, so an interrupted copy never
+    # leaves a partial generation.
+    local staging="generations/.staging-$sequence"
+    rm -rf "$staging"
+    mkdir "$staging" || return 1
+    cp index.json "$staging/index.json" || return 1
+    cp index.json.sig "$staging/index.json.sig" || return 1
+    mv "$staging" "$generation" || return 1
+  elif ! cmp -s index.json "$generation/index.json" || ! cmp -s index.json.sig "$generation/index.json.sig"; then
+    printf '%s holds other bytes: a published generation is never changed\n' "$generation" >&2
+    return 1
+  fi
+  printf '%s' "$generation"
+}
+
 main() {
   if (( $# < 1 || $# > 2 )); then
     printf 'usage: scripts/sign <key.pem> [expires-in, e.g. 720h]\n' >&2
@@ -59,7 +90,6 @@ main() {
     printf 'toshi: not found on PATH; install the Toshi CLI\n' >&2
     return 1
   fi
-
   local key="$1" line id status
   line="$(public_key_line "$key")" || return 1
   id="$(key_id "$key")" || return 1
@@ -85,8 +115,10 @@ main() {
   fi
   toshi product catalog sign index.json --format 2 --key "$key" "${expires[@]}" || return 1
   toshi product catalog verify index.json --config catalog.toml || return 1
+  local generation
+  generation="$(archive_generation)" || return 1
   go run ./cmd/check --valid-for 168h || return 1
-  printf 'Updated index.json and index.json.sig. Commit both files'
+  printf 'Updated index.json, index.json.sig and %s. Commit them' "$generation"
   if [[ "$status" == set ]]; then
     printf ' and catalog.toml'
   fi

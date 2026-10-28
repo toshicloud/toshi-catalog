@@ -5,6 +5,8 @@ on:
     paths:
       - "index.json"
       - "index.json.sig"
+      - "generations/**"
+      - ".gitattributes"
       - "catalog.toml"
       - "cmd/**"
       - "go.mod"
@@ -16,6 +18,8 @@ on:
     paths:
       - "index.json"
       - "index.json.sig"
+      - "generations/**"
+      - ".gitattributes"
       - "catalog.toml"
       - "cmd/**"
       - "go.mod"
@@ -30,6 +34,7 @@ permissions:
 
 jobs:
   check:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -38,6 +43,22 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Refuse a changed generation
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_REF}" ]; then
+            exit 0
+          fi
+          changed=$(git diff --name-only --diff-filter=MDR "origin/${BASE_REF}...HEAD" -- generations/)
+          if [ -n "${changed}" ]; then
+            printf '%s\n' "${changed}" >&2
+            echo "::error::a signed generation is never changed: sign a higher sequence"
+            exit 1
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -62,3 +83,59 @@ jobs:
             args+=(--base base.json)
           fi
           go run ./cmd/check "${args[@]}"
+
+  served:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build the checker
+        run: go build -o "${RUNNER_TEMP}/check" ./cmd/check
+
+      - name: Check the served index
+        run: |
+          set -u
+          set +e
+          "${RUNNER_TEMP}/check" --served --valid-for 168h 2> "${RUNNER_TEMP}/served.err"
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/served.err" >&2
+          case "${status}" in
+            0) exit 0 ;;
+            3) title="Served index unreachable" ;;
+            *) title="Served index invalid" ;;
+          esac
+          reason=$(head -n 1 "${RUNNER_TEMP}/served.err" | sed 's/%/%25/g; s/\r/%0D/g')
+          echo "::error title=${title}::${reason:-no output}"
+          exit 1
+
+      - name: Open or update the issue for a failing check
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          number=$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 \
+            --search 'in:title "Catalog check failing"' \
+            --json number,title \
+            --jq '.[] | select(.title == "Catalog check failing") | .number' \
+            | head -n 1)
+          if [ -n "${number}" ]; then
+            gh issue comment "${number}" --repo "${GITHUB_REPOSITORY}" --body "The catalog check failed: ${RUN_URL}"
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" --title "Catalog check failing" --body "The catalog check failed: ${RUN_URL}"
+          fi

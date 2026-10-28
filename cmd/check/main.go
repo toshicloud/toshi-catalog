@@ -11,9 +11,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -62,15 +63,94 @@ func parseKey(s string) (ed25519.PublicKey, error) {
 }
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, time.Now()))
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, time.Now(), nil))
 }
 
-func run(args []string, stdout, stderr io.Writer, now time.Time) int {
+// fetch reads exactly one HTTPS resource without crossing hosts on redirects.
+func fetch(client *http.Client, address string, max int64) ([]byte, error) {
+	u, err := url.Parse(address)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
+		return nil, errors.New("URL must be https")
+	}
+	if client == nil {
+		client = http.DefaultClient
+	}
+	c := *client
+	c.Timeout = 30 * time.Second
+	previousRedirect := c.CheckRedirect
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != "https" || !strings.EqualFold(req.URL.Host, u.Host) {
+			return errors.New("redirect to another host or a non-https URL")
+		}
+		if previousRedirect != nil {
+			return previousRedirect(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("too many redirects")
+		}
+		return nil
+	}
+	resp, err := c.Get(address)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %s", resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("exceeds %d bytes", max)
+	}
+	return b, nil
+}
+
+func priorSequence(b []byte) (int64, error) {
+	var prior struct {
+		Format   int   `json:"format"`
+		Sequence int64 `json:"sequence"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	if err := dec.Decode(&prior); err != nil {
+		return 0, err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return 0, errors.New("unexpected data after JSON value")
+	}
+	switch prior.Format {
+	case 1:
+		return 0, nil
+	case 2:
+		if prior.Sequence < 1 {
+			return 0, errors.New("format 2 needs a sequence of at least 1")
+		}
+		return prior.Sequence, nil
+	default:
+		return 0, fmt.Errorf("unknown format %d", prior.Format)
+	}
+}
+
+func equalFile(path string, want []byte) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, int64(len(want))+1))
+	return err == nil && bytes.Equal(b, want)
+}
+
+func run(args []string, stdout, stderr io.Writer, now time.Time, client *http.Client) int {
 	flags := flag.NewFlagSet("check", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	dir := flags.String("dir", ".", "catalog directory")
 	base := flags.String("base", "", "earlier index")
 	validFor := flags.Duration("valid-for", 0, "minimum remaining validity")
+	served := flags.Bool("served", false, "check the served index")
 	if err := flags.Parse(args); err != nil {
 		fmt.Fprintf(stderr, "check: flags: %v\n", err)
 		return 1
@@ -167,6 +247,12 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 		}
 	}
 
+	// In served mode configuration, especially the key, must be valid before
+	// making a network request.
+	if *served && problems > 0 {
+		return 1
+	}
+
 	type indexData struct {
 		Format   int               `json:"format"`
 		Sequence int64             `json:"sequence"`
@@ -175,32 +261,50 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 		Entries  []json.RawMessage `json:"entries"`
 	}
 	var ix indexData
-	index, indexRead := read(filepath.Join(*dir, "index.json"), "index.json", maxIndexBytes)
+	var index, signature []byte
+	var indexRead, sigRead bool
+	if *served {
+		address := cfg.Catalog.Sources[0].URL
+		var err error
+		index, err = fetch(client, address, maxIndexBytes)
+		if err != nil {
+			fmt.Fprintf(stderr, "check: fetch failed: %s: %v\n", address, err)
+			return 3
+		}
+		signature, err = fetch(client, address+".sig", maxSignatureBytes)
+		if err != nil {
+			fmt.Fprintf(stderr, "check: fetch failed: %s: %v\n", address+".sig", err)
+			return 3
+		}
+		indexRead, sigRead = true, true
+	} else {
+		index, indexRead = read(filepath.Join(*dir, "index.json"), "index.json", maxIndexBytes)
+	}
 	indexParsed := false
 	if indexRead {
+		var fields map[string]json.RawMessage
+		var unknown []string
+		if err := json.Unmarshal(index, &fields); err == nil {
+			for name := range fields {
+				known := false
+				for _, expected := range []string{"format", "sequence", "expires", "key_id", "entries"} {
+					known = known || name == expected
+				}
+				if !known {
+					unknown = append(unknown, name)
+				}
+			}
+		}
+		sort.Strings(unknown)
+		for _, name := range unknown {
+			problem("index.json", "json: unknown field %q", name)
+		}
 		dec := json.NewDecoder(bytes.NewReader(index))
 		dec.DisallowUnknownFields()
 		decodeErr := dec.Decode(&ix)
 		if decodeErr != nil {
 			// A strict decode reports only one unknown field. Report each one,
 			// then retain valid fields so independent checks can still run.
-			var fields map[string]json.RawMessage
-			var unknown []string
-			if err := json.NewDecoder(bytes.NewReader(index)).Decode(&fields); err == nil {
-				for name := range fields {
-					known := false
-					for _, expected := range []string{"format", "sequence", "expires", "key_id", "entries"} {
-						known = known || strings.EqualFold(name, expected)
-					}
-					if !known {
-						unknown = append(unknown, name)
-					}
-				}
-			}
-			sort.Strings(unknown)
-			for _, name := range unknown {
-				problem("index.json", "json: unknown field %q", name)
-			}
 			strictErr := decodeErr
 			if len(unknown) == 0 || !strings.HasPrefix(strictErr.Error(), "json: unknown field ") {
 				problem("index.json", "%v", strictErr)
@@ -244,34 +348,20 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 		if ix.KeyID == "" {
 			problem("index.json", "key_id is required")
 		}
-		validName := regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+		if ix.Entries == nil {
+			problem("index.json", "entries is required and must be an array")
+		}
 		seen := make(map[string]bool)
 		for i, raw := range ix.Entries {
-			var entry struct {
-				ID        string `json:"id"`
-				Publisher string `json:"publisher"`
-			}
-			if err := json.Unmarshal(raw, &entry); err != nil {
-				problem("index.json", "entries[%d]: %v", i, err)
-				continue
-			}
-			if !validName.MatchString(entry.ID) {
-				problem("index.json", "entries[%d]: invalid id %q", i, entry.ID)
-			}
-			if !validName.MatchString(entry.Publisher) {
-				problem("index.json", "entries[%d]: invalid publisher %q", i, entry.Publisher)
-			}
-			if configReady && len(publishers) > 0 && !publishers[entry.Publisher] {
-				problem("index.json", "entries[%d]: publisher %q is not listed in catalog.toml", i, entry.Publisher)
-			}
-			if seen[entry.ID] {
-				problem("index.json", "entries[%d]: duplicate id %q", i, entry.ID)
-			}
-			seen[entry.ID] = true
+			checkEntry(raw, i, ix.Format, publishers, configReady && len(publishers) > 0, seen, func(format string, args ...interface{}) {
+				problem("index.json", format, args...)
+			})
 		}
 	}
 
-	signature, sigRead := read(filepath.Join(*dir, "index.json.sig"), "index.json.sig", maxSignatureBytes)
+	if !*served {
+		signature, sigRead = read(filepath.Join(*dir, "index.json.sig"), "index.json.sig", maxSignatureBytes)
+	}
 	var sig []byte
 	sigParsed := false
 	if sigRead {
@@ -297,42 +387,43 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 			problem("index.json.sig", "the signature does not verify with key %q", ix.KeyID)
 		}
 	}
+	if !*served && indexParsed {
+		generation := filepath.Join("generations", fmt.Sprint(ix.Sequence))
+		if !indexRead || !sigRead || !equalFile(filepath.Join(*dir, generation, "index.json"), index) || !equalFile(filepath.Join(*dir, generation, "index.json.sig"), signature) {
+			problem(filepath.ToSlash(generation)+"/", "missing or differs from the root pair: run scripts/sign")
+		}
+	}
+	if *served {
+		path := filepath.Join(*dir, "index.json")
+		if _, err := os.Stat(path); err == nil {
+			if b, ok := read(path, "index.json", maxIndexBytes); ok {
+				sequence, err := priorSequence(b)
+				if err != nil {
+					problem("index.json", "committed index: %v", err)
+				} else if indexParsed {
+					switch {
+					case ix.Sequence < sequence:
+						problem("index.json", "served sequence %d is lower than the committed %d", ix.Sequence, sequence)
+					case ix.Sequence == sequence && sequence > 0 && !bytes.Equal(index, b):
+						problem("index.json", "served sequence %d is the committed sequence with other bytes", ix.Sequence)
+					}
+				}
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			problem("index.json", "committed index: %v", err)
+		}
+	}
 
 	if *base != "" {
 		if b, ok := read(*base, *base, maxIndexBytes); ok {
-			var prior struct {
-				Format   int   `json:"format"`
-				Sequence int64 `json:"sequence"`
-			}
-			dec := json.NewDecoder(bytes.NewReader(b))
-			err := dec.Decode(&prior)
-			if err == nil && dec.More() {
-				err = errors.New("more than one JSON value")
-			} else if err == nil {
-				var extra json.RawMessage
-				if end := dec.Decode(&extra); !errors.Is(end, io.EOF) {
-					err = errors.New("unexpected data after JSON value")
-				}
-			}
-			if err == nil {
-				switch prior.Format {
-				case 1:
-					prior.Sequence = 0
-				case 2:
-					if prior.Sequence < 1 {
-						err = errors.New("format 2 needs a sequence of at least 1")
-					}
-				default:
-					err = fmt.Errorf("unknown format %d", prior.Format)
-				}
-			}
+			sequence, err := priorSequence(b)
 			if err != nil {
 				problem(*base, "%v", err)
 			} else if indexParsed {
 				switch {
-				case ix.Sequence < prior.Sequence:
-					problem("index.json", "sequence %d is lower than main's %d", ix.Sequence, prior.Sequence)
-				case ix.Sequence == prior.Sequence && !bytes.Equal(index, b):
+				case ix.Sequence < sequence:
+					problem("index.json", "sequence %d is lower than main's %d", ix.Sequence, sequence)
+				case ix.Sequence == sequence && !bytes.Equal(index, b):
 					problem("index.json", "sequence %d is main's with other bytes: raise the sequence (scripts/sign does)", ix.Sequence)
 				}
 			}
