@@ -9,10 +9,12 @@ holder published.
 | File | What it is |
 | --- | --- |
 | `catalog.toml` | The `[[catalog.sources]]` entry a deployment copies into its own configuration. |
+| `entries/` | One file per product, the source the signed index is built from. |
 | `index.json` | The catalog itself, served at the URL in `catalog.toml`. |
 | `index.json.sig` | The signature over `index.json`. |
 | `generations/` | Each signed index as it was published: one directory per generation. Never edited. |
 | `cmd/check` | The checker that validates the catalog. |
+| `scripts/build-index` | Builds `index.json` from `entries/`. `scripts/sign` runs it. |
 | `scripts/sign` | The signing tool the key holder runs. |
 
 ## Listing the catalog in a deployment
@@ -23,16 +25,22 @@ it only if it verifies against one of the keys in the entry.
 
 ## Signing and publishing
 
+The signed index is built from `entries/`, one file per product (see
+`entries/README.md` for the file and the proposal flow). `scripts/build-index`
+builds `index.json` from that folder and exits non-zero when a file there is
+wrong; it changes nothing when the index already lists the same entries.
+
 The key holder runs:
 
 ```
 scripts/sign <key.pem> [expires-in]
 ```
 
-It needs the Toshi CLI, Go and `openssl`. It signs a new index and writes its
-generation. Every change to the catalog is a higher sequence: an entry, a
-release, a state change or a block. A published generation is never edited;
-the check refuses a pull request that changes, deletes or renames one.
+It needs the Toshi CLI, Go and `openssl`. It runs `scripts/build-index` first,
+so the signed index always lists what `entries/` holds, then signs a new index
+and writes its generation. Every change to the catalog is a higher sequence: an
+entry, a release, a state change or a block. A published generation is never
+edited; the check refuses a pull request that changes, deletes or renames one.
 
 A release or an entry that must stop being installed is blocked the same way,
 by signing a higher sequence with its state set to `blocked`. A block carries
@@ -40,6 +48,30 @@ a reason, and for a release taken back, when it took effect. Its successor may
 be absent: something can be blocked without naming what replaces it.
 
 Re-sign before the index expires.
+
+## Emergency block
+
+When a product must stop being installed now, the key holder signs a higher
+sequence with the block in it:
+
+1. Edit the entry file. Either take the release back by moving it to
+   `withdrawn` with `state` set to `blocked`, and its `reason`, `effective` and
+   `digests`; or set the entry's own `state` to `blocked` with a `reason`.
+2. Run `scripts/sign <key.pem>`. It builds the index from `entries/`, signs it
+   and writes the new generation.
+3. Check that `generations/<new sequence>/` was written.
+4. Open a pull request with the entry, `index.json`, `index.json.sig` and the
+   new generation, and merge it.
+5. Confirm with the served check: run the workflow on demand
+   (`workflow_dispatch`) and see it pass against the new index.
+
+On its next refresh each installation suspends the product, and
+`product.blocked` is recorded with the source and the reason. A later index
+that lifts the block does not resume it: each workspace turns the product on
+again.
+
+The test rehearses this with a throwaway key. The live rehearsal, with the real
+key, is the key holder's.
 
 ## What installations do
 
@@ -76,13 +108,14 @@ bytes. It also refuses a pull request that changes, deletes or renames a file
 under `generations/`.
 
 It runs on every pull request and every push to `main` that touches the catalog,
-`catalog.toml`, the generations, the checker, the Go module files,
+`catalog.toml`, the entries, the generations, the checker, the Go module files,
 `.gitattributes` or the workflow. Those jobs read the repository and nothing
 else.
 
 Once a week, and on demand, a second job checks the index as served, with the
-same expiry rule, and fails when it cannot reach it or when the index it reads
-is invalid.
+same expiry rule, and fails when it cannot reach it, when it does not meet the
+required validity, or when the index it reads is invalid. Its issue names which
+of those three failed.
 
 ## Move to a new key
 
@@ -104,11 +137,21 @@ last one it accepted, until its index expires.
 - Pull-request jobs have read-only permissions: they can check a change but
   never write to the repository.
 - The actions the workflow uses are pinned to full commit shas.
+- The catalog signing-key holder is the person who acts on the
+  `catalog check failed` issue.
 - The scheduled job runs without the key. When it fails it opens an issue
-  titled `Catalog check failing`, or comments on the open one, with the run
-  URL, so a missed signature or an unreachable index is noticed whether or not
-  the key holder is watching. Nothing closes it automatically: close it once
-  the check passes.
+  titled `catalog check failed`, or comments on the open one, with the run
+  URL and which of the three checks failed, so a missed signature or an
+  unreachable index is noticed whether or not the key holder is watching.
+  Nothing closes it automatically: close it once the check passes.
+
+## Maintainers
+
+The `catalog-maintainers` team maintains the catalog. `.github/CODEOWNERS`
+names it for the repository and for `entries/toshi/`, so pull requests there
+ask it for review. The rules on `main` require no approval, so the file routes
+review requests and gates nothing. A publisher's folder gets its own line when
+its first entry lands.
 
 ## Generations
 

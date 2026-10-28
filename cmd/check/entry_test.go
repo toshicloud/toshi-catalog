@@ -119,6 +119,7 @@ func TestEntryRefusals(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			writeEntriesFromIndex(t, dir, index)
 			writeGeneration(t, dir, 1, index, sig)
 			var stdout, stderr bytes.Buffer
 			code := run([]string{"--dir", dir}, &stdout, &stderr, now, nil)

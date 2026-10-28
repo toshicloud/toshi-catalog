@@ -109,6 +109,9 @@ main() {
     printf 'Created index.json.\n'
   fi
 
+  # Build first, so the signed index always lists what entries/ holds.
+  scripts/build-index || return 1
+
   local -a expires=()
   if (( $# == 2 )); then
     expires=(--expires-in "$2")

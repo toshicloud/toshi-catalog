@@ -151,6 +151,7 @@ func run(args []string, stdout, stderr io.Writer, now time.Time, client *http.Cl
 	base := flags.String("base", "", "earlier index")
 	validFor := flags.Duration("valid-for", 0, "minimum remaining validity")
 	served := flags.Bool("served", false, "check the served index")
+	build := flags.Bool("build", false, "build the index from entries")
 	if err := flags.Parse(args); err != nil {
 		fmt.Fprintf(stderr, "check: flags: %v\n", err)
 		return 1
@@ -164,6 +165,10 @@ func run(args []string, stdout, stderr io.Writer, now time.Time, client *http.Cl
 	problem := func(file, format string, a ...interface{}) {
 		fmt.Fprintf(stderr, "check: %s: %s\n", file, fmt.Sprintf(format, a...))
 		problems++
+	}
+	if *build && (*served || *base != "" || *validFor != 0) {
+		problem("flags", "--build cannot be combined with --served, --base or --valid-for")
+		return 1
 	}
 	read := func(path, label string, max int64) ([]byte, bool) {
 		f, err := os.Open(path)
@@ -214,28 +219,30 @@ func run(args []string, stdout, stderr io.Writer, now time.Time, client *http.Cl
 			}
 			configReady = len(cfg.Catalog.Sources) == 1
 			for i, source := range cfg.Catalog.Sources {
-				if source.Name == "" {
-					problem("catalog.toml", "sources[%d]: name is required", i)
-				}
-				if source.URL == "" {
-					problem("catalog.toml", "sources[%d]: url is required", i)
-				}
-				if len(source.Keys) == 0 {
-					problem("catalog.toml", "sources[%d]: at least one key is required", i)
-				}
-				if len(source.Publishers) == 0 {
-					problem("catalog.toml", "sources[%d]: at least one publisher is required", i)
-				}
-				for _, key := range source.Keys {
-					if key == placeholderKey {
-						problem("catalog.toml", "keys holds the placeholder: the key holder sets the catalog's public key and signs index.json (see README.md)")
-						continue
+				if !*build {
+					if source.Name == "" {
+						problem("catalog.toml", "sources[%d]: name is required", i)
 					}
-					pub, err := parseKey(key)
-					if err != nil {
-						problem("catalog.toml", "%v", err)
-					} else if configReady {
-						keys = append(keys, pub)
+					if source.URL == "" {
+						problem("catalog.toml", "sources[%d]: url is required", i)
+					}
+					if len(source.Keys) == 0 {
+						problem("catalog.toml", "sources[%d]: at least one key is required", i)
+					}
+					if len(source.Publishers) == 0 {
+						problem("catalog.toml", "sources[%d]: at least one publisher is required", i)
+					}
+					for _, key := range source.Keys {
+						if key == placeholderKey {
+							problem("catalog.toml", "keys holds the placeholder: the key holder sets the catalog's public key and signs index.json (see README.md)")
+							continue
+						}
+						pub, err := parseKey(key)
+						if err != nil {
+							problem("catalog.toml", "%v", err)
+						} else if configReady {
+							keys = append(keys, pub)
+						}
 					}
 				}
 				if configReady {
@@ -245,6 +252,16 @@ func run(args []string, stdout, stderr io.Writer, now time.Time, client *http.Cl
 				}
 			}
 		}
+	}
+	if *build {
+		entries, ok := entriesFromTree(*dir, publishers, configReady, problem)
+		if !ok || problems > 0 {
+			return 1
+		}
+		if !writeBuiltIndex(*dir, entries, stdout, problem) {
+			return 1
+		}
+		return 0
 	}
 
 	// In served mode configuration, especially the key, must be valid before
@@ -356,6 +373,12 @@ func run(args []string, stdout, stderr io.Writer, now time.Time, client *http.Cl
 			checkEntry(raw, i, ix.Format, publishers, configReady && len(publishers) > 0, seen, func(format string, args ...interface{}) {
 				problem("index.json", format, args...)
 			})
+		}
+	}
+	if !*served {
+		entries, ok := entriesFromTree(*dir, publishers, configReady, problem)
+		if ok && indexParsed && ix.Entries != nil {
+			compareEntries(ix.Entries, entries, problem)
 		}
 	}
 

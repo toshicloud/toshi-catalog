@@ -36,6 +36,36 @@ func writeGeneration(t *testing.T, dir string, sequence int64, index, sig []byte
 	}
 }
 
+func writeEntriesFromIndex(t *testing.T, dir string, index []byte) {
+	t.Helper()
+	root := filepath.Join(dir, "entries")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var data struct {
+		Entries []json.RawMessage `json:"entries"`
+	}
+	if json.Unmarshal(index, &data) != nil {
+		return // Some checker fixtures intentionally contain malformed indexes.
+	}
+	for _, raw := range data.Entries {
+		var identity struct {
+			ID        string `json:"id"`
+			Publisher string `json:"publisher"`
+		}
+		if json.Unmarshal(raw, &identity) != nil || !idPattern.MatchString(identity.ID) || !idPattern.MatchString(identity.Publisher) {
+			continue
+		}
+		folder := filepath.Join(root, identity.Publisher)
+		if err := os.MkdirAll(folder, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(folder, identity.ID+".json"), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // TestThumbprintRFC8037 checks the key ID against the Ed25519 example of
 // RFC 8037 appendix A.3.
 func TestThumbprintRFC8037(t *testing.T) {
@@ -191,6 +221,7 @@ func TestRun(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			writeEntriesFromIndex(t, dir, f.index)
 			var generation struct {
 				Sequence int64 `json:"sequence"`
 			}

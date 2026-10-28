@@ -6,6 +6,7 @@ on:
       - "index.json"
       - "index.json.sig"
       - "generations/**"
+      - "entries/**"
       - ".gitattributes"
       - "catalog.toml"
       - "cmd/**"
@@ -19,6 +20,7 @@ on:
       - "index.json"
       - "index.json.sig"
       - "generations/**"
+      - "entries/**"
       - ".gitattributes"
       - "catalog.toml"
       - "cmd/**"
@@ -106,6 +108,7 @@ jobs:
         run: go build -o "${RUNNER_TEMP}/check" ./cmd/check
 
       - name: Check the served index
+        id: served
         run: |
           set -u
           set +e
@@ -113,13 +116,31 @@ jobs:
           status=$?
           set -e
           cat "${RUNNER_TEMP}/served.err" >&2
+          if [ "${status}" -eq 0 ]; then
+            exit 0
+          fi
+          reason=$(head -n 1 "${RUNNER_TEMP}/served.err" | tr -d '\r')
           case "${status}" in
-            0) exit 0 ;;
-            3) title="Served index unreachable" ;;
-            *) title="Served index invalid" ;;
+            3)
+              kind=unreachable
+              title="The served index was unreachable"
+              ;;
+            *)
+              if grep -q 'expire' "${RUNNER_TEMP}/served.err"; then
+                kind=expired
+                title="The served index did not meet --valid-for"
+              else
+                kind=invalid
+                title="The served index was invalid"
+              fi
+              ;;
           esac
-          reason=$(head -n 1 "${RUNNER_TEMP}/served.err" | sed 's/%/%25/g; s/\r/%0D/g')
-          echo "::error title=${title}::${reason:-no output}"
+          {
+            echo "kind=${kind}"
+            echo "reason=${reason:-no output}"
+          } >> "${GITHUB_OUTPUT}"
+          annotation=$(printf '%s' "${reason:-no output}" | sed 's/%/%25/g')
+          echo "::error title=${title}::${annotation}"
           exit 1
 
       - name: Open or update the issue for a failing check
@@ -127,15 +148,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          KIND: ${{ steps.served.outputs.kind }}
+          REASON: ${{ steps.served.outputs.reason }}
         run: |
           set -euo pipefail
+          reason="${REASON:-no output}"
+          case "${KIND}" in
+            unreachable) what="the served index was unreachable (exit 3): ${reason}" ;;
+            expired) what="the served index did not meet --valid-for 168h (expired or too near expiry): ${reason}" ;;
+            invalid) what="the served index was invalid: ${reason}" ;;
+            *) what="the served check failed before it could classify the index: ${reason}" ;;
+          esac
+          body=$(printf 'catalog check failed: %s\nrun: %s' "${what}" "${RUN_URL}")
           number=$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 \
-            --search 'in:title "Catalog check failing"' \
+            --search 'in:title "catalog check failed"' \
             --json number,title \
-            --jq '.[] | select(.title == "Catalog check failing") | .number' \
+            --jq '.[] | select(.title == "catalog check failed") | .number' \
             | head -n 1)
           if [ -n "${number}" ]; then
-            gh issue comment "${number}" --repo "${GITHUB_REPOSITORY}" --body "The catalog check failed: ${RUN_URL}"
+            gh issue comment "${number}" --repo "${GITHUB_REPOSITORY}" --body "${body}"
           else
-            gh issue create --repo "${GITHUB_REPOSITORY}" --title "Catalog check failing" --body "The catalog check failed: ${RUN_URL}"
+            gh issue create --repo "${GITHUB_REPOSITORY}" --title "catalog check failed" --label bug --body "${body}"
           fi
