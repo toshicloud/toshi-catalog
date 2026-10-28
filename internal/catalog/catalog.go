@@ -9,6 +9,7 @@ import (
 // Catalog is the directory and its distributions, ordered by ID or name.
 type Catalog struct {
 	Publishers    []Publisher
+	Builtins      []Builtin
 	Products      []Product
 	Distributions []Distribution
 }
@@ -17,6 +18,14 @@ type Publisher struct {
 	ID   string `toml:"id"`
 	Name string `toml:"name"`
 	URL  string `toml:"url"`
+}
+
+// Builtin is a product that is part of Toshi itself: a distribution lists it
+// with builtin = true, and it has no product entry or module.
+type Builtin struct {
+	ID          string `toml:"id"`
+	Name        string `toml:"name"`
+	Description string `toml:"description"`
 }
 
 type Product struct {

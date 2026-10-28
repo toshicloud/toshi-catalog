@@ -52,7 +52,7 @@ type manifestPart struct {
 
 type hostedPage struct {
 	pageHeader
-	Builtins []string
+	Builtins []catalog.Builtin
 	Products []productView
 	Manifest []manifestPart
 }
@@ -157,9 +157,13 @@ func build(c *catalog.Catalog, dir string) ([]outputFile, error) {
 	for i, part := range parts {
 		hosted.Manifest = append(hosted.Manifest, manifestPart{Text: part, CarriageReturn: i < len(parts)-1})
 	}
+	builtins := make(map[string]catalog.Builtin)
+	for _, b := range c.Builtins {
+		builtins[b.ID] = b
+	}
 	for _, product := range distribution.Products {
 		if product.Builtin != nil && *product.Builtin {
-			hosted.Builtins = append(hosted.Builtins, product.ID)
+			hosted.Builtins = append(hosted.Builtins, builtins[product.ID])
 		}
 	}
 	for _, product := range products {

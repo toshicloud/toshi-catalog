@@ -5,6 +5,7 @@ on:
     paths:
       - "products/**"
       - "publishers.toml"
+      - "builtins.toml"
       - "distributions/**"
       - "cmd/**"
       - "internal/**"
@@ -17,6 +18,7 @@ on:
     paths:
       - "products/**"
       - "publishers.toml"
+      - "builtins.toml"
       - "distributions/**"
       - "cmd/**"
       - "internal/**"

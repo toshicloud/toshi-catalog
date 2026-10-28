@@ -36,6 +36,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(problems) > 0 {
 		return 1
 	}
-	fmt.Fprintf(stdout, "catalog: %d publishers, %d products, %d distributions: ok\n", len(c.Publishers), len(c.Products), len(c.Distributions))
+	fmt.Fprintf(stdout, "catalog: %d publishers, %d builtins, %d products, %d distributions: ok\n", len(c.Publishers), len(c.Builtins), len(c.Products), len(c.Distributions))
 	return 0
 }
