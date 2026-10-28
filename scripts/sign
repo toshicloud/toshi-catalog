@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Sign and verify the catalog with a key held outside the repository.
+set -euo pipefail
+
+public_key_base64() {
+  local der
+  der="$(openssl pkey -in "$1" -pubout -outform DER | openssl base64 -A)" || return 1
+  if [[ ${#der} -ne 60 || "${der:0:16}" != MCowBQYDK2VwAyEA ]]; then
+    printf 'key: not an Ed25519 private key\n' >&2
+    return 1
+  fi
+  printf '%s' "$der" | openssl base64 -d -A | tail -c 32 | openssl base64 -A
+}
+
+public_key_line() {
+  local public
+  public="$(public_key_base64 "$1")" || return 1
+  printf 'ed25519:%s\n' "$public"
+}
+
+key_id() {
+  local x id
+  x="$(public_key_base64 "$1" | tr '+/' '-_' | tr -d '=')" || return 1
+  id="$(printf '{"crv":"Ed25519","kty":"OKP","x":"%s"}' "$x" |
+    openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')" || return 1
+  printf '%s\n' "$id"
+}
+
+placeholder='ed25519:REPLACE_WITH_THE_CATALOG_PUBLIC_KEY'
+
+# catalog_key_status sets the key in place of the placeholder and prints
+# "set", or prints "present" or "missing" for a catalog.toml that lists
+# real keys. The checker and the Toshi CLI parse the file after signing.
+catalog_key_status() {
+  local config="$1" line="$2" temp
+  if grep -Fq "\"$placeholder\"" "$config"; then
+    temp="$(mktemp)" || return 1
+    # A base64 key holds no "|", "&" or "\", so it is safe in the replacement.
+    sed "s|\"$placeholder\"|\"$line\"|" "$config" > "$temp" && cat "$temp" > "$config"
+    rm -f -- "$temp"
+    printf 'set'
+  elif grep -Fq "\"$line\"" "$config"; then
+    printf 'present'
+  else
+    printf 'missing'
+  fi
+}
+
+main() {
+  if (( $# < 1 || $# > 2 )); then
+    printf 'usage: scripts/sign <key.pem> [expires-in, e.g. 720h]\n' >&2
+    return 2
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    printf 'openssl: not found on PATH\n' >&2
+    return 1
+  fi
+  if ! command -v toshi >/dev/null 2>&1; then
+    printf 'toshi: not found on PATH; install the Toshi CLI\n' >&2
+    return 1
+  fi
+
+  local key="$1" line id status
+  line="$(public_key_line "$key")" || return 1
+  id="$(key_id "$key")" || return 1
+  status="$(catalog_key_status catalog.toml "$line")" || return 1
+  case "$status" in
+    set) printf 'Set the public key in catalog.toml.\n' ;;
+    present) ;;
+    missing)
+      printf 'this key is not in catalog.toml; add its line to keys (README.md, moving to a new key)\n' >&2
+      return 1
+      ;;
+    *) printf 'catalog.toml: could not check the public key\n' >&2; return 1 ;;
+  esac
+
+  if [[ ! -f index.json ]]; then
+    printf '{\n  "format": 1,\n  "key_id": "%s",\n  "entries": []\n}\n' "$id" > index.json
+    printf 'Created index.json.\n'
+  fi
+
+  local -a expires=()
+  if (( $# == 2 )); then
+    expires=(--expires-in "$2")
+  fi
+  toshi product catalog sign index.json --format 2 --key "$key" "${expires[@]}" || return 1
+  toshi product catalog verify index.json --config catalog.toml || return 1
+  go run ./cmd/check --valid-for 168h || return 1
+  printf 'Updated index.json and index.json.sig. Commit both files'
+  if [[ "$status" == set ]]; then
+    printf ' and catalog.toml'
+  fi
+  printf '.\n'
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
