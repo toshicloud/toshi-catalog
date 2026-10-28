@@ -67,6 +67,27 @@ func validateBuiltins(builtins []Builtin, productFiles map[string]bool, report r
 	}
 }
 
+// validateKeyProviders checks the key_providers of builtins.toml.
+func validateKeyProviders(keyProviders []KeyProvider, report reporter) {
+	seen := make(map[string]bool)
+	for i, k := range keyProviders {
+		field := fmt.Sprintf("key_providers[%d]", i)
+		if !idPattern.MatchString(k.Kind) {
+			report(field+".kind", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
+		}
+		if k.Kind != "" && seen[k.Kind] {
+			report(field+".kind", "duplicate key provider %q", k.Kind)
+		}
+		seen[k.Kind] = true
+		if !nonempty(k.Name) || len(k.Name) > 64 {
+			report(field+".name", "must contain 1 to 64 bytes")
+		}
+		if !nonempty(k.Description) || len(k.Description) > 280 {
+			report(field+".description", "must contain 1 to 280 bytes")
+		}
+	}
+}
+
 func validateProducts(products []Product, publishers []Publisher, reporterFor func(string) reporter) {
 	publisherIDs := make(map[string]bool)
 	for _, p := range publishers {

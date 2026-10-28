@@ -8,3 +8,9 @@ builtin = true
 [[products]]
 id = "previews"
 builtin = true
+[[key_providers]]
+kind = "aws_kms"
+builtin = true
+[[key_providers]]
+kind = "transit"
+builtin = true

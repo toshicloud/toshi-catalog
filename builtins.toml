@@ -9,3 +9,15 @@ description = "Runs GitHub Actions jobs on the deployment's hosts."
 id = "previews"
 name = "Previews"
 description = "Serves a sandbox's http channels at preview hostnames and shares them through share links."
+
+# The key provider engines that are part of Toshi itself. A distribution
+# lists one by its kind with `builtin = true`; toshi-key-provider links it.
+[[key_providers]]
+kind = "aws_kms"
+name = "AWS KMS"
+description = "Keeps each workspace's data key wrapped under one AWS KMS key."
+
+[[key_providers]]
+kind = "transit"
+name = "Vault Transit"
+description = "Keeps each workspace's data key wrapped by a Vault or OpenBao transit key."

@@ -14,15 +14,17 @@ type publishersFile struct {
 }
 
 type builtinsFile struct {
-	Builtins []Builtin `toml:"builtins"`
+	Builtins     []Builtin     `toml:"builtins"`
+	KeyProviders []KeyProvider `toml:"key_providers"`
 }
 
 type distributionFile struct {
 	Distribution struct {
 		Name string `toml:"name"`
 	} `toml:"distribution"`
-	Products []DistributionProduct `toml:"products"`
-	Modules  []Module              `toml:"modules"`
+	Products     []DistributionProduct     `toml:"products"`
+	KeyProviders []DistributionKeyProvider `toml:"key_providers"`
+	Modules      []Module                  `toml:"modules"`
 }
 
 // Load returns all readable records even when they contain schema problems.
@@ -95,6 +97,12 @@ func Load(dir string) (*Catalog, []Problem, error) {
 	for _, b := range c.Builtins {
 		builtinIDs[b.ID] = true
 	}
+	c.KeyProviders = bf.KeyProviders
+	validateKeyProviders(c.KeyProviders, report("builtins.toml"))
+	keyProviderKinds := make(map[string]bool)
+	for _, k := range c.KeyProviders {
+		keyProviderKinds[k.Kind] = true
+	}
 
 	entries, err = os.ReadDir(filepath.Join(dir, "distributions"))
 	if err != nil {
@@ -117,9 +125,10 @@ func Load(dir string) (*Catalog, []Problem, error) {
 		if !ok {
 			continue
 		}
-		d := Distribution{Name: df.Distribution.Name, Products: df.Products, Modules: df.Modules, File: file}
-		validateDistribution(d, builtinIDs, productFiles, productByFile, report(file))
+		d := Distribution{Name: df.Distribution.Name, Products: df.Products, KeyProviders: df.KeyProviders, Modules: df.Modules, File: file}
+		validateDistribution(d, builtinIDs, keyProviderKinds, productFiles, productByFile, report(file))
 		sort.SliceStable(d.Products, func(i, j int) bool { return d.Products[i].ID < d.Products[j].ID })
+		sort.SliceStable(d.KeyProviders, func(i, j int) bool { return d.KeyProviders[i].Kind < d.KeyProviders[j].Kind })
 		sort.SliceStable(d.Modules, func(i, j int) bool {
 			if d.Modules[i].Path != d.Modules[j].Path {
 				return d.Modules[i].Path < d.Modules[j].Path
@@ -130,6 +139,7 @@ func Load(dir string) (*Catalog, []Problem, error) {
 	}
 	sort.SliceStable(c.Publishers, func(i, j int) bool { return c.Publishers[i].ID < c.Publishers[j].ID })
 	sort.SliceStable(c.Builtins, func(i, j int) bool { return c.Builtins[i].ID < c.Builtins[j].ID })
+	sort.SliceStable(c.KeyProviders, func(i, j int) bool { return c.KeyProviders[i].Kind < c.KeyProviders[j].Kind })
 	sort.SliceStable(c.Products, func(i, j int) bool { return c.Products[i].ID < c.Products[j].ID })
 	sort.SliceStable(c.Distributions, func(i, j int) bool {
 		if c.Distributions[i].Name != c.Distributions[j].Name {

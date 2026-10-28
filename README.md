@@ -14,7 +14,7 @@ The directory is published as a site at
 | Path | What it is |
 | --- | --- |
 | `publishers.toml` | One `[[publishers]]` table per publisher, with its name and URL. |
-| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, with its name and description. |
+| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, and one `[[key_providers]]` table per key provider engine that is, each with its name and description. |
 | `products/` | One TOML file per product, `<id>.toml`, named by the product's `id`. |
 | `distributions/` | One TOML file per deployment manifest. `hosted.toml` is the hosted deployment's. |
 | `internal/catalog` | Loads and validates publishers, products and distributions. |
@@ -41,6 +41,11 @@ the release that follows the pull request ships it.
 A `[[products]]` table with `builtin = true` names a part of Toshi itself: its
 `id` must be one `builtins.toml` lists, and it needs no product file.
 
+A `[[key_providers]]` table names a key provider engine the deployment's
+`toshi-key-provider` links, by its `kind`, with `builtin = true`: every key
+provider is part of Toshi itself, and its kind must be one `builtins.toml`
+lists.
+
 ## Withdrawing a product or a version
 
 Mark the product, or the version, withdrawn with a `reason` and a `since` date,
@@ -63,8 +68,11 @@ or write one: a `[distribution]` table, the `[[products]]` it ships, and a
   compatibility bounds; `removed_in` only on a deprecated version, and higher
   than it.
 - `builtins.toml`: a unique id in the same form as a product's, a name of 1–64
-  bytes, a description of 1–280 bytes, and no products/ entry with the same id.
-- `distributions/`: every builtin is one `builtins.toml` lists, every other
+  bytes, a description of 1–280 bytes, and no products/ entry with the same id;
+  for each key provider, a unique kind in the same form, a name and a
+  description.
+- `distributions/`: every builtin and every key provider is one `builtins.toml`
+  lists, every key provider is listed once with `builtin = true`, every other
   product and every module resolves to a product entry, a module version is one
   the product lists, and nothing listed is withdrawn.
 - Withdrawal: a product or a version marked withdrawn carries a reason and a

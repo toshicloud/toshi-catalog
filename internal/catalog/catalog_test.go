@@ -40,6 +40,9 @@ id = "runners"
 builtin = true
 [[products]]
 id = "deploys"
+[[key_providers]]
+kind = "transit"
+builtin = true
 [[modules]]
 path = "github.com/acme/deploys"
 version = "v1.4.0"
@@ -51,12 +54,18 @@ name = "Runners"
 description = "Runs jobs."
 `
 
+const keyProvidersFixture = `[[key_providers]]
+kind = "transit"
+name = "Vault Transit"
+description = "Keeps the key in Vault or OpenBao."
+`
+
 func fixtures(t *testing.T) (string, map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
 	files := map[string]string{
 		"publishers.toml":           publishersFixture,
-		"builtins.toml":             builtinsFixture,
+		"builtins.toml":             builtinsFixture + keyProvidersFixture,
 		"products/deploys.toml":     productFixture,
 		"distributions/hosted.toml": distributionFixture,
 	}
@@ -167,6 +176,16 @@ func TestSchemaRules(t *testing.T) {
 		{"builtin unknown key", builtins, `name = "Runners"`, "name = \"Runners\"\nextra = true", ": builtins[0].extra:"},
 		{"duplicate builtin", builtins, builtinsFixture, builtinsFixture + builtinsFixture, "duplicate builtin"},
 		{"builtin is a product", builtins, `id = "runners"`, `id = "deploys"`, "is also a products/deploys.toml entry"},
+		{"key provider kind", builtins, `kind = "transit"`, `kind = "Transit"`, ": key_providers[0].kind:"},
+		{"key provider name", builtins, `name = "Vault Transit"`, `name = ""`, ": key_providers[0].name:"},
+		{"key provider description", builtins, `description = "Keeps the key in Vault or OpenBao."`, `description = ""`, ": key_providers[0].description:"},
+		{"key provider unknown key", builtins, `name = "Vault Transit"`, "name = \"Vault Transit\"\nextra = true", ": key_providers[0].extra:"},
+		{"duplicate key provider", builtins, keyProvidersFixture, keyProvidersFixture + keyProvidersFixture, "duplicate key provider"},
+		{"distribution key provider unknown key", dist, `kind = "transit"`, "kind = \"transit\"\nextra = true", ": key_providers[0].extra:"},
+		{"key provider not builtin", dist, "kind = \"transit\"\nbuiltin = true", `kind = "transit"`, "must be builtin = true"},
+		{"key provider builtin false", dist, "builtin = true\n[[modules]]", "builtin = false\n[[modules]]", "must be builtin = true"},
+		{"unknown key provider", dist, `kind = "transit"`, `kind = "gcp_kms"`, "builtin requires a matching builtins.toml key_providers entry"},
+		{"duplicate distribution key provider", dist, "[[modules]]", "[[key_providers]]\nkind = \"transit\"\nbuiltin = true\n[[modules]]", "key provider transit: is listed more than once"},
 		{"missing module", dist, "[[modules]]\npath = \"github.com/acme/deploys\"\nversion = \"v1.4.0\"\n", "", "requires exactly one module"},
 		{"wrong version", dist, version, `version = "v1.5.0"`, "is not listed in the product"},
 		{"orphan module", dist, `path = "github.com/acme/deploys"`, `path = "github.com/acme/other"`, "does not belong to a listed catalog product"},

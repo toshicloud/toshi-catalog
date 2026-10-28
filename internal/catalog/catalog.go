@@ -10,6 +10,7 @@ import (
 type Catalog struct {
 	Publishers    []Publisher
 	Builtins      []Builtin
+	KeyProviders  []KeyProvider
 	Products      []Product
 	Distributions []Distribution
 }
@@ -24,6 +25,14 @@ type Publisher struct {
 // with builtin = true, and it has no product entry or module.
 type Builtin struct {
 	ID          string `toml:"id"`
+	Name        string `toml:"name"`
+	Description string `toml:"description"`
+}
+
+// KeyProvider is a key provider engine that is part of Toshi itself: a
+// distribution lists its kind with builtin = true.
+type KeyProvider struct {
+	Kind        string `toml:"kind"`
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
 }
@@ -89,14 +98,22 @@ func (p *Product) Latest() *Version {
 }
 
 type Distribution struct {
-	Name     string
-	Products []DistributionProduct
-	Modules  []Module
-	File     string
+	Name         string
+	Products     []DistributionProduct
+	KeyProviders []DistributionKeyProvider
+	Modules      []Module
+	File         string
 }
 
 type DistributionProduct struct {
 	ID      string `toml:"id"`
+	Builtin *bool  `toml:"builtin"`
+}
+
+// DistributionKeyProvider is a key provider engine a distribution's
+// toshi-key-provider links, by its kind.
+type DistributionKeyProvider struct {
+	Kind    string `toml:"kind"`
 	Builtin *bool  `toml:"builtin"`
 }
 
