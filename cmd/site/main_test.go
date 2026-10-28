@@ -95,11 +95,14 @@ name = "hosted"
 [[products]]
 id = "runners"
 builtin = true
+stability = "stable"
 [[products]]
 id = "deploys"
+stability = "deprecated"
 [[products]]
 id = "previews"
 builtin = true
+stability = "beta"
 [[modules]]
 path = "github.com/acme/deploys"
 version = "v1.4.0"
@@ -109,14 +112,17 @@ const testBuiltins = `[[builtins]]
 id = "runners"
 name = "Runners"
 description = "Runs jobs."
+stability = "stable"
 [[builtins]]
 id = "previews"
 name = "Previews"
 description = "Serves previews."
+stability = "beta"
 [[builtins]]
 id = "other_builtin"
 name = "Other"
 description = "Built into another distribution."
+stability = "alpha"
 `
 
 func writeFixture(t *testing.T, dir, name, content string) {
@@ -140,7 +146,7 @@ func fixture(t *testing.T) string {
 	writeFixture(t, dir, "products/retired.toml", testRetired)
 	writeFixture(t, dir, "products/extras.toml", testExtra)
 	writeFixture(t, dir, "distributions/hosted.toml", strings.ReplaceAll(testHosted, "\n", "\r\n"))
-	writeFixture(t, dir, "distributions/other.toml", "[distribution]\nname = \"other\"\n[[products]]\nid = \"other_builtin\"\nbuiltin = true\n[[products]]\nid = \"extras\"\n[[modules]]\npath = \"github.com/acme/extras\"\nversion = \"v1.0.0\"\n")
+	writeFixture(t, dir, "distributions/other.toml", "[distribution]\nname = \"other\"\n[[products]]\nid = \"other_builtin\"\nbuiltin = true\nstability = \"alpha\"\n[[products]]\nid = \"extras\"\nstability = \"alpha\"\n[[modules]]\npath = \"github.com/acme/extras\"\nversion = \"v1.0.0\"\n")
 	return dir
 }
 
@@ -199,8 +205,8 @@ func TestRunBuildsSite(t *testing.T) {
 	if strings.Contains(extraCard, ">Hosted</span>") {
 		t.Error("a product from another distribution is marked hosted")
 	}
-	requireContains(t, product, "github.com/acme/deploys", "go get github.com/acme/deploys@v1.8.0", "Copy module path", "Copy go get", "Copy URL", "v1.4.0", "v2.0.0", "v0.6.0 to v0.7.0", "Unsafe &lt;script&gt; release (2026-10-20)", "https://example.com/api", "https://example.com/dashboard", "toshi-deploys", "github.com/acme/deploys-go", "https://example.com/docs?a=1&amp;b=2", "Hosted: ships version v1.4.0")
-	requireContains(t, hosted, "Built into Toshi", "<strong>Previews</strong> (<code>previews</code>): Serves previews.", "<strong>Runners</strong> (<code>runners</code>): Runs jobs.", "github.com/acme/deploys", "v1.4.0", "Copy module path", "Copy version", "data-copy-target=\"hosted-manifest\"")
+	requireContains(t, product, "github.com/acme/deploys", "go get github.com/acme/deploys@v1.8.0", "Copy module path", "Copy go get", "Copy URL", "v1.4.0", "v2.0.0", "v0.6.0 to v0.7.0", "Unsafe &lt;script&gt; release (2026-10-20)", "https://example.com/api", "https://example.com/dashboard", "toshi-deploys", "github.com/acme/deploys-go", "https://example.com/docs?a=1&amp;b=2", "<h1>Deploys <span class=\"badge\">stable</span></h1>", "Hosted: ships version v1.4.0 <span class=\"badge\">deprecated</span>.")
+	requireContains(t, hosted, "Built into Toshi", "<strong>Previews</strong> (<code>previews</code>) <span class=\"badge\">beta</span>: Serves previews.", "<strong>Runners</strong> (<code>runners</code>) <span class=\"badge\">stable</span>: Runs jobs.", "github.com/acme/deploys", "v1.4.0", "Copy module path", "Copy version", "data-copy-target=\"hosted-manifest\"")
 	if strings.Index(hosted, "<code>previews</code>") >= strings.Index(hosted, "<code>runners</code>") || strings.Contains(hosted, "other_builtin") || strings.Contains(hosted, "github.com/acme/extras") {
 		t.Error("built-ins are not ordered or came from another distribution")
 	}

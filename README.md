@@ -14,7 +14,7 @@ The directory is published as a site at
 | Path | What it is |
 | --- | --- |
 | `publishers.toml` | One `[[publishers]]` table per publisher, with its name and URL. |
-| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, and one `[[key_providers]]` table per key provider engine that is, each with its name and description. |
+| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, with its name, description and stability, and one `[[key_providers]]` table per key provider engine that is, with its name and description. |
 | `products/` | One TOML file per product, `<id>.toml`, named by the product's `id`. |
 | `distributions/` | One TOML file per deployment manifest. `hosted.toml` is the hosted deployment's. |
 | `internal/catalog` | Loads and validates publishers, products and distributions. |
@@ -33,13 +33,15 @@ The directory is published as a site at
 ## Adding it to the hosted deployment
 
 Open a pull request that adds the product and its module to
-`distributions/hosted.toml`: a `[[products]]` table naming the product, and a
-`[[modules]]` table giving the product's module path and the version that ships
-it. Each Toshi release builds from this file at a commit the release names, so
+`distributions/hosted.toml`: a `[[products]]` table naming the product and the
+stability of the version that ships, and a `[[modules]]` table giving the
+product's module path and that version. Each Toshi release builds from this file at a commit the release names, so
 the release that follows the pull request ships it.
 
 A `[[products]]` table with `builtin = true` names a part of Toshi itself: its
-`id` must be one `builtins.toml` lists, and it needs no product file.
+`id` must be one `builtins.toml` lists, its `stability` the one listed there,
+and it needs no product file. A Toshi build refuses a manifest whose stability
+for a builtin differs from the stability the product declares in that build.
 
 A `[[key_providers]]` table names a key provider engine the deployment's
 `toshi-key-provider` links, by its `kind`, with `builtin = true`: every key
@@ -56,7 +58,8 @@ so the two changes go together. The release that follows drops it.
 ## Self-hosted deployments
 
 Copy `distributions/hosted.toml` as the starting point for your own manifest,
-or write one: a `[distribution]` table, the `[[products]]` it ships, and a
+or write one: a `[distribution]` table, the `[[products]]` it ships with
+each one's stability, and a
 `[[modules]]` table per product giving its module path and version.
 
 ## What the check enforces
@@ -68,13 +71,15 @@ or write one: a `[distribution]` table, the `[[products]]` it ships, and a
   compatibility bounds; `removed_in` only on a deprecated version, and higher
   than it.
 - `builtins.toml`: a unique id in the same form as a product's, a name of 1–64
-  bytes, a description of 1–280 bytes, and no products/ entry with the same id;
-  for each key provider, a unique kind in the same form, a name and a
-  description.
+  bytes, a description of 1–280 bytes, a stability (`alpha`, `beta`, `stable`
+  or `deprecated`), and no products/ entry with the same id; for each key
+  provider, a unique kind in the same form, a name and a description.
 - `distributions/`: every builtin and every key provider is one `builtins.toml`
   lists, every key provider is listed once with `builtin = true`, every other
   product and every module resolves to a product entry, a module version is one
-  the product lists, and nothing listed is withdrawn.
+  the product lists, and nothing listed is withdrawn. Every listed product has
+  a stability: a builtin's is the one `builtins.toml` gives, a catalog
+  product's that of the version its module ships.
 - Withdrawal: a product or a version marked withdrawn carries a reason and a
   date, and no distribution lists it.
 

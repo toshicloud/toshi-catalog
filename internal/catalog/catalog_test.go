@@ -38,8 +38,10 @@ name = "hosted"
 [[products]]
 id = "runners"
 builtin = true
+stability = "stable"
 [[products]]
 id = "deploys"
+stability = "beta"
 [[key_providers]]
 kind = "transit"
 builtin = true
@@ -52,6 +54,7 @@ const builtinsFixture = `[[builtins]]
 id = "runners"
 name = "Runners"
 description = "Runs jobs."
+stability = "stable"
 `
 
 const keyProvidersFixture = `[[key_providers]]
@@ -186,6 +189,12 @@ func TestSchemaRules(t *testing.T) {
 		{"key provider builtin false", dist, "builtin = true\n[[modules]]", "builtin = false\n[[modules]]", "must be builtin = true"},
 		{"unknown key provider", dist, `kind = "transit"`, `kind = "gcp_kms"`, "builtin requires a matching builtins.toml key_providers entry"},
 		{"duplicate distribution key provider", dist, "[[modules]]", "[[key_providers]]\nkind = \"transit\"\nbuiltin = true\n[[modules]]", "key provider transit: is listed more than once"},
+		{"builtin stability", builtins, `stability = "stable"`, `stability = "preview"`, ": builtins[0].stability:"},
+		{"builtin stability missing", builtins, `stability = "stable"`, "", ": builtins[0].stability:"},
+		{"distribution stability missing", dist, "builtin = true\nstability = \"stable\"", "builtin = true", ": product runners: stability must be"},
+		{"distribution stability", dist, `stability = "beta"`, `stability = "preview"`, ": product deploys: stability must be"},
+		{"builtin stability differs", dist, `stability = "stable"`, `stability = "beta"`, `stability "beta" differs from builtins.toml's "stable"`},
+		{"version stability differs", dist, `stability = "beta"`, `stability = "stable"`, `stability "stable" differs from version v1.4.0's "beta"`},
 		{"missing module", dist, "[[modules]]\npath = \"github.com/acme/deploys\"\nversion = \"v1.4.0\"\n", "", "requires exactly one module"},
 		{"wrong version", dist, version, `version = "v1.5.0"`, "is not listed in the product"},
 		{"orphan module", dist, `path = "github.com/acme/deploys"`, `path = "github.com/acme/other"`, "does not belong to a listed catalog product"},
@@ -264,7 +273,7 @@ func TestWithdrawalTransitions(t *testing.T) {
 	check("product is withdrawn")
 	files["products/deploys.toml"] = productFixture + "withdrawn = { reason = \"reason\", since = 2026-10-28 }\n"
 	check("module version \"v1.4.0\" is withdrawn")
-	files["distributions/hosted.toml"] = "[distribution]\nname = \"hosted\"\n[[products]]\nid = \"runners\"\nbuiltin = true\n"
+	files["distributions/hosted.toml"] = "[distribution]\nname = \"hosted\"\n[[products]]\nid = \"runners\"\nbuiltin = true\nstability = \"stable\"\n"
 	check("")
 	files["products/deploys.toml"] = replace(t, productFixture, "[surfaces]", "[withdrawn]\nreason = \"reason\"\nsince = 2026-10-28\n[surfaces]")
 	check("")
@@ -274,7 +283,7 @@ func TestDistributionProductIsolation(t *testing.T) {
 	dir, files := fixtures(t)
 	files["products/alpha.toml"] = strings.ReplaceAll(strings.ReplaceAll(productFixture, "deploys", "alpha"), "Deploys", "Alpha") +
 		"withdrawn = { reason = \"reason\", since = 2026-10-28 }\n"
-	files["distributions/hosted.toml"] += "\n[[products]]\nid = \"alpha\"\n[[modules]]\npath = \"github.com/acme/alpha\"\nversion = \"v1.4.0\"\n"
+	files["distributions/hosted.toml"] += "\n[[products]]\nid = \"alpha\"\nstability = \"beta\"\n[[modules]]\npath = \"github.com/acme/alpha\"\nversion = \"v1.4.0\"\n"
 	writeFixtures(t, dir, files)
 	c, problems, err := Load(dir)
 	if err != nil || len(problems) != 1 || problems[0].Field != "product alpha" || !strings.Contains(problems[0].Message, "withdrawn") {
@@ -290,7 +299,7 @@ func TestDistributionProductIsolation(t *testing.T) {
 
 func TestHostedDoesNotCombineDistributions(t *testing.T) {
 	dir, files := fixtures(t)
-	files["distributions/hosted.toml"] = "[distribution]\nname = \"hosted\"\n[[products]]\nid = \"deploys\"\n"
+	files["distributions/hosted.toml"] = "[distribution]\nname = \"hosted\"\n[[products]]\nid = \"deploys\"\nstability = \"beta\"\n"
 	files["distributions/other.toml"] = "[distribution]\nname = \"hosted\"\n[[modules]]\npath = \"github.com/acme/deploys\"\nversion = \"v1.4.0\"\n"
 	writeFixtures(t, dir, files)
 	c, problems, err := Load(dir)
@@ -317,7 +326,7 @@ func TestHostedUsesCanonicalManifest(t *testing.T) {
 
 func TestVersionWithdrawalIsolation(t *testing.T) {
 	dir, files := fixtures(t)
-	other := "\n[[versions]]\nversion = \"v1.5.0\"\nstability = \"stable\"\ntoshi = { min = \"v0.6.0\" }\n"
+	other := "\n[[versions]]\nversion = \"v1.5.0\"\nstability = \"beta\"\ntoshi = { min = \"v0.6.0\" }\n"
 	withdrawal := "withdrawn = { reason = \"reason\", since = 2026-10-28 }\n"
 	files["products/deploys.toml"] = productFixture + other + withdrawal
 	writeFixtures(t, dir, files)
@@ -357,6 +366,7 @@ func TestOptionalAndSemanticVersions(t *testing.T) {
 	files["products/deploys.toml"] = strings.Replace(files["products/deploys.toml"], `description = "Deploy applications."`, `description = "`+strings.Repeat("x", 280)+`"`, 1)
 	files["products/deploys.toml"] = strings.Replace(files["products/deploys.toml"], `stability = "beta"`, "stability = \"deprecated\"\nremoved_in = \"v2.0.0\"", 1)
 	files["products/deploys.toml"] = strings.Replace(files["products/deploys.toml"], `toshi = { min = "v0.6.0", max = "v0.7.0" }`, `toshi = { min = "v0.6.0" }`, 1)
+	files["distributions/hosted.toml"] = strings.Replace(distributionFixture, `stability = "beta"`, `stability = "deprecated"`, 1)
 	files["products/deploys.toml"] += "\n[[versions]]\nversion = \"v1.5.0-rc.1+build\"\nstability = \"alpha\"\ntoshi = { min = \"v0.7.0\", max = \"v0.7.0\" }\n"
 	writeFixtures(t, dir, files)
 	c, problems, err := Load(dir)

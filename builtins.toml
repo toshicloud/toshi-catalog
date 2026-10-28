@@ -4,11 +4,13 @@
 id = "runners"
 name = "Runners"
 description = "Runs GitHub Actions jobs on the deployment's hosts."
+stability = "stable"
 
 [[builtins]]
 id = "previews"
 name = "Previews"
 description = "Serves a sandbox's http channels at preview hostnames and shares them through share links."
+stability = "beta"
 
 # The key provider engines that are part of Toshi itself. A distribution
 # lists one by its kind with `builtin = true`; toshi-key-provider links it.

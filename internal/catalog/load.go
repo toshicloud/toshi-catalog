@@ -93,9 +93,9 @@ func Load(dir string) (*Catalog, []Problem, error) {
 	}
 	c.Builtins = bf.Builtins
 	validateBuiltins(c.Builtins, productFiles, report("builtins.toml"))
-	builtinIDs := make(map[string]bool)
+	builtinStability := make(map[string]string)
 	for _, b := range c.Builtins {
-		builtinIDs[b.ID] = true
+		builtinStability[b.ID] = b.Stability
 	}
 	c.KeyProviders = bf.KeyProviders
 	validateKeyProviders(c.KeyProviders, report("builtins.toml"))
@@ -126,7 +126,7 @@ func Load(dir string) (*Catalog, []Problem, error) {
 			continue
 		}
 		d := Distribution{Name: df.Distribution.Name, Products: df.Products, KeyProviders: df.KeyProviders, Modules: df.Modules, File: file}
-		validateDistribution(d, builtinIDs, keyProviderKinds, productFiles, productByFile, report(file))
+		validateDistribution(d, builtinStability, keyProviderKinds, productFiles, productByFile, report(file))
 		sort.SliceStable(d.Products, func(i, j int) bool { return d.Products[i].ID < d.Products[j].ID })
 		sort.SliceStable(d.KeyProviders, func(i, j int) bool { return d.KeyProviders[i].Kind < d.KeyProviders[j].Kind })
 		sort.SliceStable(d.Modules, func(i, j int) bool {

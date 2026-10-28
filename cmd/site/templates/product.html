@@ -1,7 +1,7 @@
 {{/* Product details, versions, surfaces and distribution status. */}}
 {{define "product"}}{{template "head" .}}
 {{with .Product}}
-<h1>{{.Name}}</h1>
+<h1>{{.Name}}{{with .LatestVersion}} <span class="badge">{{.Stability}}</span>{{end}}</h1>
 <p>By {{.PublisherName}}</p>
 <p>{{.Description}}</p>
 {{with .Withdrawal}}<p class="notice"><strong>Withdrawn:</strong> {{.Reason}} ({{.Date}})</p>{{end}}
@@ -28,6 +28,6 @@
 <h2>Documentation</h2>
 <div class="copy-row"><a id="docs-url" href="{{.Docs}}">{{.Docs}}</a><button type="button" data-copy-target="docs-url">Copy URL</button></div>
 <h2>Hosted deployment</h2>
-{{if .Hosted}}<p>Hosted: ships version {{.HostedVersion}}.</p>{{else}}<p>Not shipped by the hosted deployment.</p>{{end}}
+{{if .Hosted}}<p>Hosted: ships version {{.HostedVersion}} <span class="badge">{{.HostedStability}}</span>.</p>{{else}}<p>Not shipped by the hosted deployment.</p>{{end}}
 {{end}}
 {{template "foot" .}}{{end}}
