@@ -1,0 +1,41 @@
+/* Readable, responsive styles for the static product catalog. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.55;
+  --background: #fff;
+  --foreground: #17212a;
+  --border: #bbc5ce;
+  --panel: #f2f5f7;
+  --link: #075cad;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #141b21;
+    --foreground: #edf2f6;
+    --border: #596a77;
+    --panel: #222e37;
+    --link: #8dcaff;
+  }
+}
+body { margin: 0; background: var(--background); color: var(--foreground); }
+main, .site-header nav { max-width: 70rem; margin: 0 auto; padding: 1rem; }
+.site-header { border-bottom: 1px solid var(--border); }
+.site-header nav { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+a { color: var(--link); overflow-wrap: anywhere; }
+h1, h2, h3 { line-height: 1.2; }
+.product-list { list-style: none; padding: 0; display: grid; gap: 1rem; }
+.card, .notice { border: 1px solid var(--border); border-radius: 0.4rem; padding: 1rem; }
+.card h2, .card h3 { margin-top: 0; }
+.badge { display: inline-block; padding: 0.1rem 0.5rem; border: 1px solid var(--border); border-radius: 1rem; font-size: 0.85rem; }
+.hosted, .withdrawn, .notice { background: var(--panel); }
+.copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.6rem 0; }
+code { overflow-wrap: anywhere; }
+button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--border); border-radius: 0.3rem; padding: 0.3rem 0.6rem; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+.table-wrap, pre { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; text-align: left; }
+th, td { padding: 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+dt { font-weight: bold; }
+dd { margin: 0 0 0.75rem; overflow-wrap: anywhere; }
+pre { padding: 1rem; background: var(--panel); border-radius: 0.3rem; }

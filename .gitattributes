@@ -1,4 +1,0 @@
-index.json -text
-index.json.sig -text
-*.sig binary
-generations/** -text

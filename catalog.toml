@@ -1,7 +1,0 @@
-# The [[catalog.sources]] entry a Toshi deployment adds to its configuration
-# to list this catalog.
-[[catalog.sources]]
-name = "toshi"
-url = "https://raw.githubusercontent.com/toshicloud/toshi-catalog/main/index.json"
-keys = ["ed25519:REPLACE_WITH_THE_CATALOG_PUBLIC_KEY"]
-publishers = ["toshi"]

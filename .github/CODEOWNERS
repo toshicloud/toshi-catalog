@@ -1,4 +1,3 @@
 # Code owners route review requests; the ruleset requires no approvals.
-# A publisher's folder gets its own line when its first entry lands.
+# A publisher's product files get their own line when its first product lands.
 *               @toshicloud/catalog-maintainers
-/entries/toshi/ @toshicloud/catalog-maintainers

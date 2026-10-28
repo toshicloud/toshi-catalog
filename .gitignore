@@ -1,3 +1,1 @@
-*.pem
-base.json
-generations/.staging-*
+_site/
