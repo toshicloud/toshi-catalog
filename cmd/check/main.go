@@ -28,22 +28,35 @@ const (
 	maxSignatureBytes = 1 << 10
 )
 
-// Copied from internal/catalog/index.go in the Toshi source; keep the two the same.
-func KeyID(pub ed25519.PublicKey) string {
-	jwk := `{"crv":"Ed25519","kty":"OKP","x":"` + base64.RawURLEncoding.EncodeToString(pub) + `"}`
-	sum := sha256.Sum256([]byte(jwk))
+// thumbprint is the key ID an index names: the JWK thumbprint of the
+// public key (RFC 7638 section 3), whose required members for an Ed25519
+// key are crv, kty and x (RFC 8037 section 2), hashed with SHA-256 and
+// written in base64url without padding.
+func thumbprint(pub ed25519.PublicKey) string {
+	// encoding/json writes struct fields in order and without whitespace,
+	// which is the member order and form RFC 7638 requires.
+	jwk, _ := json.Marshal(struct {
+		Crv string `json:"crv"`
+		Kty string `json:"kty"`
+		X   string `json:"x"`
+	}{"Ed25519", "OKP", base64.RawURLEncoding.EncodeToString(pub)})
+	sum := sha256.Sum256(jwk)
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// Copied from internal/catalog/index.go in the Toshi source; keep the two the same.
-func ParsePublicKey(s string) (ed25519.PublicKey, error) {
-	rest, ok := strings.CutPrefix(s, keyPrefix)
+// parseKey reads a key as catalog.toml lists it: "ed25519:" and the 32
+// bytes of the public key in standard base64.
+func parseKey(s string) (ed25519.PublicKey, error) {
+	encoded, ok := strings.CutPrefix(s, keyPrefix)
 	if !ok {
-		return nil, fmt.Errorf("public key %q: want %s and the key in base64", s, keyPrefix)
+		return nil, fmt.Errorf("key %q does not start with %q", s, keyPrefix)
 	}
-	b, err := base64.StdEncoding.DecodeString(rest)
-	if err != nil || len(b) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("public key %q: not %d bytes of base64", s, ed25519.PublicKeySize)
+	b, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("key %q is not standard base64", s)
+	}
+	if len(b) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("key %q holds %d bytes, not %d", s, len(b), ed25519.PublicKeySize)
 	}
 	return ed25519.PublicKey(b), nil
 }
@@ -138,7 +151,7 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 						problem("catalog.toml", "keys holds the placeholder: the key holder sets the catalog's public key and signs index.json (see README.md)")
 						continue
 					}
-					pub, err := ParsePublicKey(key)
+					pub, err := parseKey(key)
 					if err != nil {
 						problem("catalog.toml", "%v", err)
 					} else if configReady {
@@ -273,7 +286,7 @@ func run(args []string, stdout, stderr io.Writer, now time.Time) int {
 	if indexParsed && ix.KeyID != "" && configReady && len(keys) > 0 {
 		var trusted ed25519.PublicKey
 		for _, key := range keys {
-			if KeyID(key) == ix.KeyID {
+			if thumbprint(key) == ix.KeyID {
 				trusted = key
 				break
 			}

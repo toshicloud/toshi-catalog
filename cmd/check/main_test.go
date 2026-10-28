@@ -18,6 +18,21 @@ import (
 	"time"
 )
 
+// TestThumbprintRFC8037 checks the key ID against the Ed25519 example of
+// RFC 8037 appendix A.3.
+func TestThumbprintRFC8037(t *testing.T) {
+	pub, err := parseKey("ed25519:11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := thumbprint(pub), "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"; got != want {
+		t.Fatalf("thumbprint = %s, want %s", got, want)
+	}
+	if _, err := parseKey("ed25519:AAAA"); err == nil || !strings.Contains(err.Error(), "holds 3 bytes, not 32") {
+		t.Fatalf("parseKey short key = %v", err)
+	}
+}
+
 func TestRun(t *testing.T) {
 	pub, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -40,7 +55,7 @@ func TestRun(t *testing.T) {
 		return []byte(fmt.Sprintf(`{"format":%d,"sequence":%d%s,"key_id":%q,"entries":%s}`, format, sequence, expiresField, key, entries))
 	}
 	entries := `[{"id":"widget","publisher":"toshi","future_field":{"anything":true}}]`
-	valid := index(2, 3, expiry, KeyID(pub), entries)
+	valid := index(2, 3, expiry, thumbprint(pub), entries)
 
 	type fixture struct {
 		config    string
@@ -58,9 +73,9 @@ func TestRun(t *testing.T) {
 		want   []string
 	}{
 		{name: "valid"},
-		{name: "expiry reported in UTC", mutate: func(f *fixture) { f.index = index(2, 3, "2035-01-11T05:00:00+05:00", KeyID(pub), entries) }},
+		{name: "expiry reported in UTC", mutate: func(f *fixture) { f.index = index(2, 3, "2035-01-11T05:00:00+05:00", thumbprint(pub), entries) }},
 		{name: "placeholder", mutate: func(f *fixture) { f.config = strings.ReplaceAll(f.config, line, placeholderKey) }, want: []string{"keys holds the placeholder: the key holder sets the catalog's public key and signs index.json (see README.md)"}},
-		{name: "malformed key", mutate: func(f *fixture) { f.config = strings.ReplaceAll(f.config, line, "ed25519:bad") }, want: []string{"not 32 bytes of base64"}},
+		{name: "malformed key", mutate: func(f *fixture) { f.config = strings.ReplaceAll(f.config, line, "ed25519:bad") }, want: []string{"is not standard base64"}},
 		{name: "missing catalog", mutate: func(f *fixture) { f.remove = []string{"catalog.toml"} }, want: []string{"check: catalog.toml:"}},
 		{name: "missing index", mutate: func(f *fixture) { f.remove = []string{"index.json"} }, want: []string{"check: index.json:"}},
 		{name: "missing signature", mutate: func(f *fixture) { f.remove = []string{"index.json.sig"} }, want: []string{"check: index.json.sig:"}},
@@ -68,31 +83,35 @@ func TestRun(t *testing.T) {
 		{name: "unknown catalog key", mutate: func(f *fixture) { f.config += "extra = true\n" }, want: []string{"unknown key"}},
 		{name: "unknown top-level field", mutate: func(f *fixture) { f.index = []byte(strings.TrimSuffix(string(f.index), "}") + `,"other":true}`) }, want: []string{"unknown field"}},
 		{name: "unknown fields and other problems", mutate: func(f *fixture) {
-			f.index = index(2, 0, "", KeyID(pub), `[{"id":"Bad-id","publisher":"other"}]`)
+			f.index = index(2, 0, "", thumbprint(pub), `[{"id":"Bad-id","publisher":"other"}]`)
 			f.index = []byte(strings.TrimSuffix(string(f.index), "}") + `,"first_unknown":true,"second_unknown":true}`)
 			f.signature = []byte("invalid!")
 		}, want: []string{"unknown field \"first_unknown\"", "unknown field \"second_unknown\"", "sequence must be at least 1", "expires is required", "invalid id", "publisher \"other\" is not listed", "invalid base64 signature"}},
 		{name: "second JSON value", mutate: func(f *fixture) { f.index = append(f.index, []byte(" {}")...) }, want: []string{"more than one JSON value"}},
 		{name: "trailing JSON delimiter", mutate: func(f *fixture) { f.index = append(f.index, ']') }, want: []string{"unexpected data after JSON value"}},
-		{name: "format 1", mutate: func(f *fixture) { f.index = index(1, 3, expiry, KeyID(pub), entries) }, want: []string{"format must be 2"}},
-		{name: "sequence 0", mutate: func(f *fixture) { f.index = index(2, 0, expiry, KeyID(pub), entries) }, want: []string{"sequence must be at least 1"}},
-		{name: "no expires", mutate: func(f *fixture) { f.index = index(2, 3, "", KeyID(pub), entries) }, want: []string{"expires is required"}},
-		{name: "untrusted key", mutate: func(f *fixture) { f.index = index(2, 3, expiry, KeyID(other), entries) }, want: []string{"which this source does not trust"}},
+		{name: "format 1", mutate: func(f *fixture) { f.index = index(1, 3, expiry, thumbprint(pub), entries) }, want: []string{"format must be 2"}},
+		{name: "sequence 0", mutate: func(f *fixture) { f.index = index(2, 0, expiry, thumbprint(pub), entries) }, want: []string{"sequence must be at least 1"}},
+		{name: "no expires", mutate: func(f *fixture) { f.index = index(2, 3, "", thumbprint(pub), entries) }, want: []string{"expires is required"}},
+		{name: "untrusted key", mutate: func(f *fixture) { f.index = index(2, 3, expiry, thumbprint(other), entries) }, want: []string{"which this source does not trust"}},
 		{name: "signature over other bytes", mutate: func(f *fixture) { f.signed = f.index; f.index = append(bytes.Clone(f.index), ' ') }, want: []string{"signature does not verify"}},
 		{name: "bad base64 signature", mutate: func(f *fixture) { f.signature = []byte("not base64!") }, want: []string{"invalid base64 signature"}},
 		{name: "oversized signature", mutate: func(f *fixture) { f.signature = bytes.Repeat([]byte("a"), maxSignatureBytes+1) }, want: []string{"exceeds 1024 bytes"}},
 		{name: "duplicate id", mutate: func(f *fixture) {
-			f.index = index(2, 3, expiry, KeyID(pub), `[{"id":"widget","publisher":"toshi"},{"id":"widget","publisher":"toshi"}]`)
+			f.index = index(2, 3, expiry, thumbprint(pub), `[{"id":"widget","publisher":"toshi"},{"id":"widget","publisher":"toshi"}]`)
 		}, want: []string{"duplicate id"}},
-		{name: "bad id", mutate: func(f *fixture) { f.index = index(2, 3, expiry, KeyID(pub), `[{"id":"Bad-id","publisher":"toshi"}]`) }, want: []string{"invalid id"}},
-		{name: "publisher not listed", mutate: func(f *fixture) { f.index = index(2, 3, expiry, KeyID(pub), `[{"id":"widget","publisher":"other"}]`) }, want: []string{"publisher \"other\" is not listed"}},
+		{name: "bad id", mutate: func(f *fixture) {
+			f.index = index(2, 3, expiry, thumbprint(pub), `[{"id":"Bad-id","publisher":"toshi"}]`)
+		}, want: []string{"invalid id"}},
+		{name: "publisher not listed", mutate: func(f *fixture) {
+			f.index = index(2, 3, expiry, thumbprint(pub), `[{"id":"widget","publisher":"other"}]`)
+		}, want: []string{"publisher \"other\" is not listed"}},
 		{name: "base lower", mutate: func(f *fixture) { f.hasBase = true; f.base = []byte(`{"format":2,"sequence":4}`) }, want: []string{"sequence 3 is lower than main's 4"}},
 		{name: "base equal same", mutate: func(f *fixture) { f.hasBase = true; f.base = bytes.Clone(f.index) }},
 		{name: "base equal different", mutate: func(f *fixture) { f.hasBase = true; f.base = append(bytes.Clone(f.index), ' ') }, want: []string{"sequence 3 is main's with other bytes: raise the sequence (scripts/sign does)"}},
 		{name: "base format 1", mutate: func(f *fixture) { f.hasBase = true; f.base = []byte(`{"format":1,"entries":[]}`) }},
 		{name: "bad base", mutate: func(f *fixture) { f.hasBase = true; f.base = []byte(`{"format":2,"sequence":`) }, want: []string{"base.json:"}},
 		{name: "expired", mutate: func(f *fixture) {
-			f.index = index(2, 3, now.Format(time.RFC3339), KeyID(pub), entries)
+			f.index = index(2, 3, now.Format(time.RFC3339), thumbprint(pub), entries)
 			f.validFor = "168h"
 		}, want: []string{"expired at 2035-01-01T00:00:00Z: run scripts/sign"}},
 		{name: "within valid-for", mutate: func(f *fixture) { f.validFor = "241h" }, want: []string{"expires at 2035-01-11T00:00:00Z, within 241h0m0s: run scripts/sign"}},
@@ -100,7 +119,7 @@ func TestRun(t *testing.T) {
 		{name: "oversized index", mutate: func(f *fixture) { f.index = append(bytes.Clone(f.index), bytes.Repeat([]byte(" "), maxIndexBytes)...) }, want: []string{"exceeds 4194304 bytes"}},
 		{name: "several independent problems", mutate: func(f *fixture) {
 			f.config = strings.ReplaceAll(f.config, line, placeholderKey)
-			f.index = index(2, 0, "", KeyID(pub), `[{"id":"Bad-id","publisher":"other"}]`)
+			f.index = index(2, 0, "", thumbprint(pub), `[{"id":"Bad-id","publisher":"other"}]`)
 			f.signature = []byte("invalid!")
 		}, want: []string{"keys holds the placeholder", "sequence must be at least 1", "expires is required", "invalid id", "publisher \"other\" is not listed", "invalid base64 signature"}},
 	}
@@ -143,7 +162,7 @@ func TestRun(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			got := run(args, &stdout, &stderr, now)
 			if len(tc.want) == 0 {
-				want := fmt.Sprintf("index.json: sequence 3, key %s, expires %s, 1 entries: ok\n", KeyID(pub), expiry)
+				want := fmt.Sprintf("index.json: sequence 3, key %s, expires %s, 1 entries: ok\n", thumbprint(pub), expiry)
 				if got != 0 || stdout.String() != want || stderr.Len() != 0 {
 					t.Fatalf("run: code %d, stdout %q, stderr %q; want code 0 and stdout %q", got, stdout.String(), stderr.String(), want)
 				}
@@ -184,7 +203,7 @@ func TestSignerKeyDerivation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("derive key: %v: %s", err, out)
 	}
-	want := keyPrefix + base64.StdEncoding.EncodeToString(pub) + "\n" + KeyID(pub) + "\n"
+	want := keyPrefix + base64.StdEncoding.EncodeToString(pub) + "\n" + thumbprint(pub) + "\n"
 	if string(out) != want {
 		t.Fatalf("derive key: got %q, want %q", out, want)
 	}
