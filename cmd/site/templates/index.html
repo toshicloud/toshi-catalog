@@ -1,0 +1,17 @@
+{{/* Product directory with current versions and hosted availability. */}}
+{{define "index"}}{{template "head" .}}
+<h1>Products</h1>
+<p>Products a Toshi deployment can compile in, each a Go module. Those marked Hosted ship on the hosted deployment: see <a href="hosted.html">what it ships</a>.</p>
+{{if .Products}}
+<ul class="product-list">
+  {{range .Products}}
+  <li class="card">
+    <h2><a href="products/{{.ID}}.html">{{.Name}}</a></h2>
+    <p>By {{.PublisherName}}</p>
+    <p>{{if .LatestVersion}}<span>{{.LatestVersion.Version}}</span> <span class="badge">{{.LatestVersion.Stability}}</span>{{if .IsWithdrawn}} <span class="badge withdrawn">Withdrawn</span>{{end}}{{else}}<span class="badge withdrawn">Withdrawn</span>{{end}}{{if .Hosted}} <span class="badge hosted">Hosted</span>{{end}}</p>
+    <p>{{.Description}}</p>
+  </li>
+  {{end}}
+</ul>
+{{else}}<p>No products are listed.</p>{{end}}
+{{template "foot" .}}{{end}}

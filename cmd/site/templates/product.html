@@ -1,0 +1,33 @@
+{{/* Product details, versions, surfaces and distribution status. */}}
+{{define "product"}}{{template "head" .}}
+{{with .Product}}
+<h1>{{.Name}}</h1>
+<p>By {{.PublisherName}}</p>
+<p>{{.Description}}</p>
+{{with .Withdrawal}}<p class="notice"><strong>Withdrawn:</strong> {{.Reason}} ({{.Date}})</p>{{end}}
+
+<h2>Module</h2>
+<div class="copy-row"><code id="module-path">{{.Module}}</code><button type="button" data-copy-target="module-path">Copy module path</button></div>
+{{if .GoGet}}<div class="copy-row"><code id="go-get">{{.GoGet}}</code><button type="button" data-copy-target="go-get">Copy go get</button></div>{{end}}
+
+<h2>Versions</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Version</th><th>Stability</th><th>Removed in</th><th>Toshi range</th><th>Withdrawn</th></tr></thead>
+  <tbody>{{range .Versions}}
+    <tr><td>{{.Version}}</td><td><span class="badge">{{.Stability}}</span></td><td>{{with .RemovedIn}}{{.}}{{else}}—{{end}}</td><td>{{with .Toshi}}{{.Min}}{{with .Max}} to {{.}}{{end}}{{end}}</td><td>{{with .Withdrawal}}{{.Reason}} ({{.Date}}){{else}}—{{end}}</td></tr>
+  {{end}}</tbody>
+</table></div>
+
+{{with .Surfaces}}<h2>Surfaces</h2><dl>
+  {{with .API}}<dt>API</dt><dd><a href="{{.}}">{{.}}</a></dd>{{end}}
+  {{with .CLI}}<dt>CLI</dt><dd><code>{{.}}</code></dd>{{end}}
+  {{with .Dashboard}}<dt>Dashboard</dt><dd><a href="{{.}}">{{.}}</a></dd>{{end}}
+  {{with .SDK}}<dt>SDK</dt><dd><code>{{.}}</code></dd>{{end}}
+</dl>{{end}}
+
+<h2>Documentation</h2>
+<div class="copy-row"><a id="docs-url" href="{{.Docs}}">{{.Docs}}</a><button type="button" data-copy-target="docs-url">Copy URL</button></div>
+<h2>Hosted deployment</h2>
+{{if .Hosted}}<p>Hosted: ships version {{.HostedVersion}}.</p>{{else}}<p>Not shipped by the hosted deployment.</p>{{end}}
+{{end}}
+{{template "foot" .}}{{end}}

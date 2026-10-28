@@ -1,0 +1,10 @@
+# The hosted Toshi deployment's distribution. A pull request changes it;
+# the release that follows ships it.
+[distribution]
+name = "hosted"
+[[products]]
+id = "runners"
+builtin = true
+[[products]]
+id = "previews"
+builtin = true
