@@ -45,6 +45,9 @@ stability = "beta"
 [[key_providers]]
 kind = "transit"
 builtin = true
+[[object_storage]]
+kind = "s3"
+builtin = true
 [[modules]]
 path = "github.com/acme/deploys"
 version = "v1.4.0"
@@ -63,12 +66,18 @@ name = "Vault Transit"
 description = "Keeps the key in Vault or OpenBao."
 `
 
+const objectStorageFixture = `[[object_storage]]
+kind = "s3"
+name = "S3"
+description = "Keeps objects in S3."
+`
+
 func fixtures(t *testing.T) (string, map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
 	files := map[string]string{
 		"publishers.toml":           publishersFixture,
-		"builtins.toml":             builtinsFixture + keyProvidersFixture,
+		"builtins.toml":             builtinsFixture + keyProvidersFixture + objectStorageFixture,
 		"products/deploys.toml":     productFixture,
 		"distributions/hosted.toml": distributionFixture,
 	}
@@ -186,9 +195,19 @@ func TestSchemaRules(t *testing.T) {
 		{"duplicate key provider", builtins, keyProvidersFixture, keyProvidersFixture + keyProvidersFixture, "duplicate key provider"},
 		{"distribution key provider unknown key", dist, `kind = "transit"`, "kind = \"transit\"\nextra = true", ": key_providers[0].extra:"},
 		{"key provider not builtin", dist, "kind = \"transit\"\nbuiltin = true", `kind = "transit"`, "must be builtin = true"},
-		{"key provider builtin false", dist, "builtin = true\n[[modules]]", "builtin = false\n[[modules]]", "must be builtin = true"},
+		{"key provider builtin false", dist, "kind = \"transit\"\nbuiltin = true", "kind = \"transit\"\nbuiltin = false", "key provider transit: must be builtin = true"},
+		{"object storage builtin false", dist, "builtin = true\n[[modules]]", "builtin = false\n[[modules]]", "object storage backend s3: must be builtin = true"},
 		{"unknown key provider", dist, `kind = "transit"`, `kind = "gcp_kms"`, "builtin requires a matching builtins.toml key_providers entry"},
 		{"duplicate distribution key provider", dist, "[[modules]]", "[[key_providers]]\nkind = \"transit\"\nbuiltin = true\n[[modules]]", "key provider transit: is listed more than once"},
+		{"object storage kind", builtins, `kind = "s3"`, `kind = "S3"`, ": object_storage[0].kind:"},
+		{"object storage name", builtins, `name = "S3"`, `name = ""`, ": object_storage[0].name:"},
+		{"object storage description", builtins, `description = "Keeps objects in S3."`, `description = ""`, ": object_storage[0].description:"},
+		{"object storage unknown key", builtins, `name = "S3"`, "name = \"S3\"\nextra = true", ": object_storage[0].extra:"},
+		{"duplicate object storage", builtins, objectStorageFixture, objectStorageFixture + objectStorageFixture, "duplicate object storage backend"},
+		{"distribution object storage unknown key", dist, `kind = "s3"`, "kind = \"s3\"\nextra = true", ": object_storage[0].extra:"},
+		{"object storage not builtin", dist, "kind = \"s3\"\nbuiltin = true", `kind = "s3"`, "object storage backend s3: must be builtin = true"},
+		{"unknown object storage", dist, `kind = "s3"`, `kind = "gcs"`, "builtin requires a matching builtins.toml object_storage entry"},
+		{"duplicate distribution object storage", dist, "[[modules]]", "[[object_storage]]\nkind = \"s3\"\nbuiltin = true\n[[modules]]", "object storage backend s3: is listed more than once"},
 		{"builtin stability", builtins, `stability = "stable"`, `stability = "preview"`, ": builtins[0].stability:"},
 		{"builtin stability missing", builtins, `stability = "stable"`, "", ": builtins[0].stability:"},
 		{"distribution stability missing", dist, "builtin = true\nstability = \"stable\"", "builtin = true", ": product runners: stability must be"},

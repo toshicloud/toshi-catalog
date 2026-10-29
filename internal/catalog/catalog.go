@@ -10,7 +10,8 @@ import (
 type Catalog struct {
 	Publishers    []Publisher
 	Builtins      []Builtin
-	KeyProviders  []KeyProvider
+	KeyProviders  []Engine
+	ObjectStorage []Engine
 	Products      []Product
 	Distributions []Distribution
 }
@@ -31,9 +32,9 @@ type Builtin struct {
 	Stability   string `toml:"stability"`
 }
 
-// KeyProvider is a key provider engine that is part of Toshi itself: a
-// distribution lists its kind with builtin = true.
-type KeyProvider struct {
+// Engine is a key provider or object storage engine that is part of Toshi
+// itself: a distribution lists its kind with builtin = true.
+type Engine struct {
 	Kind        string `toml:"kind"`
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
@@ -100,11 +101,12 @@ func (p *Product) Latest() *Version {
 }
 
 type Distribution struct {
-	Name         string
-	Products     []DistributionProduct
-	KeyProviders []DistributionKeyProvider
-	Modules      []Module
-	File         string
+	Name          string
+	Products      []DistributionProduct
+	KeyProviders  []DistributionEngine
+	ObjectStorage []DistributionEngine
+	Modules       []Module
+	File          string
 }
 
 // DistributionProduct is a product a distribution ships. Stability is the
@@ -115,9 +117,10 @@ type DistributionProduct struct {
 	Stability string `toml:"stability"`
 }
 
-// DistributionKeyProvider is a key provider engine a distribution's
-// toshi-key-provider links, by its kind.
-type DistributionKeyProvider struct {
+// DistributionEngine is an engine a distribution links, by its kind: a key
+// provider toshi-key-provider links, or an object storage backend
+// toshi-control links.
+type DistributionEngine struct {
 	Kind    string `toml:"kind"`
 	Builtin *bool  `toml:"builtin"`
 }

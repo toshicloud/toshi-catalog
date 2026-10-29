@@ -80,16 +80,28 @@ func validateBuiltins(builtins []Builtin, productFiles map[string]bool, report r
 	}
 }
 
-// validateKeyProviders checks the key_providers of builtins.toml.
-func validateKeyProviders(keyProviders []KeyProvider, report reporter) {
+// engineTable is a builtins.toml and distribution table of engines, with the
+// noun its problems name an entry by.
+type engineTable struct {
+	table, noun string
+}
+
+var (
+	keyProviderTable   = engineTable{table: "key_providers", noun: "key provider"}
+	objectStorageTable = engineTable{table: "object_storage", noun: "object storage backend"}
+)
+
+// validateEngines checks one engine table of builtins.toml and returns its
+// kinds.
+func validateEngines(engines []Engine, t engineTable, report reporter) map[string]bool {
 	seen := make(map[string]bool)
-	for i, k := range keyProviders {
-		field := fmt.Sprintf("key_providers[%d]", i)
+	for i, k := range engines {
+		field := fmt.Sprintf("%s[%d]", t.table, i)
 		if !idPattern.MatchString(k.Kind) {
 			report(field+".kind", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
 		}
 		if k.Kind != "" && seen[k.Kind] {
-			report(field+".kind", "duplicate key provider %q", k.Kind)
+			report(field+".kind", "duplicate %s %q", t.noun, k.Kind)
 		}
 		seen[k.Kind] = true
 		if !nonempty(k.Name) || len(k.Name) > 64 {
@@ -99,6 +111,7 @@ func validateKeyProviders(keyProviders []KeyProvider, report reporter) {
 			report(field+".description", "must contain 1 to 280 bytes")
 		}
 	}
+	return seen
 }
 
 func validateProducts(products []Product, publishers []Publisher, reporterFor func(string) reporter) {
