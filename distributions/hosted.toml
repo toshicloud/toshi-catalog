@@ -16,3 +16,6 @@ builtin = true
 [[key_providers]]
 kind = "transit"
 builtin = true
+[[object_storage]]
+kind = "s3"
+builtin = true

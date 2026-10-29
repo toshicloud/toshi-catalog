@@ -14,7 +14,7 @@ The directory is published as a site at
 | Path | What it is |
 | --- | --- |
 | `publishers.toml` | One `[[publishers]]` table per publisher, with its name and URL. |
-| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, with its name, description and stability, and one `[[key_providers]]` table per key provider engine that is, with its name and description. |
+| `builtins.toml` | One `[[builtins]]` table per product that is part of Toshi itself, with its name, description and stability, one `[[key_providers]]` table per key provider engine that is, and one `[[object_storage]]` table per object storage backend that is, each with its name and description. |
 | `products/` | One TOML file per product, `<id>.toml`, named by the product's `id`. |
 | `distributions/` | One TOML file per deployment manifest. `hosted.toml` is the hosted deployment's. |
 | `internal/catalog` | Loads and validates publishers, products and distributions. |
@@ -48,6 +48,11 @@ A `[[key_providers]]` table names a key provider engine the deployment's
 provider is part of Toshi itself, and its kind must be one `builtins.toml`
 lists.
 
+An `[[object_storage]]` table names an object storage backend the deployment's
+`toshi-control` links, by its `kind`, with `builtin = true`, in the same way:
+every object storage backend is part of Toshi itself, and its kind must be one
+`builtins.toml` lists.
+
 ## Withdrawing a product or a version
 
 Mark the product, or the version, withdrawn with a `reason` and a `since` date,
@@ -73,9 +78,11 @@ each one's stability, and a
 - `builtins.toml`: a unique id in the same form as a product's, a name of 1–64
   bytes, a description of 1–280 bytes, a stability (`alpha`, `beta`, `stable`
   or `deprecated`), and no products/ entry with the same id; for each key
-  provider, a unique kind in the same form, a name and a description.
-- `distributions/`: every builtin and every key provider is one `builtins.toml`
-  lists, every key provider is listed once with `builtin = true`, every other
+  provider and each object storage backend, a unique kind in the same form, a
+  name and a description.
+- `distributions/`: every builtin, key provider and object storage backend is
+  one `builtins.toml` lists, every key provider and object storage backend is
+  listed once with `builtin = true`, every other
   product and every module resolves to a product entry, a module version is one
   the product lists, and nothing listed is withdrawn. Every listed product has
   a stability: a builtin's is the one `builtins.toml` gives, a catalog

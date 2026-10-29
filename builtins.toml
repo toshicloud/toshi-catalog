@@ -23,3 +23,10 @@ description = "Keeps each workspace's data key wrapped under one AWS KMS key."
 kind = "transit"
 name = "Vault Transit"
 description = "Keeps each workspace's data key wrapped by a Vault or OpenBao transit key."
+
+# The object storage backends that are part of Toshi itself. A distribution
+# lists one by its kind with `builtin = true`; toshi-control links it.
+[[object_storage]]
+kind = "s3"
+name = "S3"
+description = "Keeps objects in an S3 bucket or in a store that speaks the S3 API."

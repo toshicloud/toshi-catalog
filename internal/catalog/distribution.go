@@ -4,8 +4,9 @@ package catalog
 import "fmt"
 
 // validateDistribution checks d against the builtins (ID to stability), the
-// key provider kinds, the product files and the products by file name.
-func validateDistribution(d Distribution, builtins map[string]string, keyProviders, files map[string]bool, products map[string]*Product, report reporter) {
+// key provider and object storage kinds, the product files and the products
+// by file name.
+func validateDistribution(d Distribution, builtins map[string]string, keyProviders, objectStorage, files map[string]bool, products map[string]*Product, report reporter) {
 	if !idPattern.MatchString(d.Name) {
 		report("distribution.name", "must start with a lowercase letter and contain only lowercase letters, digits and underscores")
 	}
@@ -79,25 +80,8 @@ func validateDistribution(d Distribution, builtins map[string]string, keyProvide
 			}
 		}
 	}
-	kinds := make(map[string]bool)
-	for _, listed := range d.KeyProviders {
-		field := "key provider " + listed.Kind
-		if listed.Kind == "" {
-			field = "key provider <empty>"
-		}
-		if !idPattern.MatchString(listed.Kind) {
-			report(field, "kind must start with a lowercase letter and contain only lowercase letters, digits and underscores")
-		}
-		if kinds[listed.Kind] {
-			report(field, "is listed more than once")
-		}
-		kinds[listed.Kind] = true
-		if listed.Builtin == nil || !*listed.Builtin {
-			report(field, "must be builtin = true: every key provider is part of Toshi itself")
-		} else if !keyProviders[listed.Kind] {
-			report(field, "builtin requires a matching builtins.toml key_providers entry")
-		}
-	}
+	validateDistributionEngines(d.KeyProviders, keyProviderTable, keyProviders, report)
+	validateDistributionEngines(d.ObjectStorage, objectStorageTable, objectStorage, report)
 	for i, m := range d.Modules {
 		if !owned[m.Path] {
 			field := fmt.Sprintf("module %s", m.Path)
@@ -105,6 +89,30 @@ func validateDistribution(d Distribution, builtins map[string]string, keyProvide
 				field = fmt.Sprintf("modules[%d]", i)
 			}
 			report(field, "does not belong to a listed catalog product")
+		}
+	}
+}
+
+// validateDistributionEngines checks a distribution's engine table t against
+// the kinds builtins.toml lists for it.
+func validateDistributionEngines(listed []DistributionEngine, t engineTable, known map[string]bool, report reporter) {
+	kinds := make(map[string]bool)
+	for _, e := range listed {
+		field := t.noun + " " + e.Kind
+		if e.Kind == "" {
+			field = t.noun + " <empty>"
+		}
+		if !idPattern.MatchString(e.Kind) {
+			report(field, "kind must start with a lowercase letter and contain only lowercase letters, digits and underscores")
+		}
+		if kinds[e.Kind] {
+			report(field, "is listed more than once")
+		}
+		kinds[e.Kind] = true
+		if e.Builtin == nil || !*e.Builtin {
+			report(field, "must be builtin = true: every %s is part of Toshi itself", t.noun)
+		} else if !known[e.Kind] {
+			report(field, "builtin requires a matching builtins.toml %s entry", t.table)
 		}
 	}
 }
